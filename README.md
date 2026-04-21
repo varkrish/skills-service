@@ -45,13 +45,23 @@ podman run -p 8090:8090 -v ./skills:/app/skills:ro skills-service
 
 ### Run as part of OPL Crew (dev compose)
 
-The [opl_ai_mono](https://github.com/varkrish/opl-crew-mono) compose references this repo via the `SKILLS_SERVICE_DIR` environment variable:
+This service is a **Git submodule** of [opl_ai_mono](https://github.com/varkrish/opl-crew-mono) at `skills-service/` (sibling to `opl-ai-software-team/`). Clone the mono repo with submodules:
 
 ```bash
-# In your .env file (in the mono repo):
-SKILLS_SERVICE_DIR=../skills-service
+git clone --recurse-submodules https://github.com/varkrish/opl-crew-mono.git opl_ai_mono
+# If you already cloned without submodules:
+cd opl_ai_mono && git submodule update --init skills-service
+```
 
-# Then:
+Dev compose under `opl-ai-software-team/` builds from `SKILLS_SERVICE_DIR` (default `../skills-service`). Optional override in the mono repo `.env`:
+
+```bash
+SKILLS_SERVICE_DIR=../skills-service
+```
+
+Then:
+
+```bash
 cd opl_ai_mono/opl-ai-software-team
 podman compose -f compose.dev.yaml up skills-service
 ```
