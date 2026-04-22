@@ -312,9 +312,7 @@ function renderResults(results, label) {
             data-owner="${escAttr(r.owner)}"
             data-repo="${escAttr(r.repo)}"
             data-slug="${escAttr(slug)}"
-            onclick="installFromCard(this)">
-            Install
-          </button>
+            onclick="installFromCard(this)">Install</button>
         </div>
       </div>`;
   }).join('')}</div>`;
@@ -423,9 +421,75 @@ function renderScanResults(data) {
     </div>`;
 }
 
+// ── Job polling ────────────────────────────────────────────────────────────
+async function pollJob(jobId, { onProgress, onDone, onError, intervalMs = 800 } = {}) {
+  const timer = setInterval(async () => {
+    try {
+      const res = await fetch(`/api/jobs/${jobId}`);
+      const job  = await res.json();
+      if (!res.ok) throw new Error(job.detail || 'Job fetch failed');
+
+      onProgress?.(job);
+
+      if (job.state === 'done' || job.state === 'failed') {
+        clearInterval(timer);
+        onDone?.(job);
+      }
+    } catch (e) {
+      clearInterval(timer);
+      onError?.(e);
+    }
+  }, intervalMs);
+}
+
+// ── Single skill install (via marketplace card) ────────────────────────────
+async function installFromCard(btn) {
+  const { owner, repo, slug } = btn.dataset;
+  if (installing.has(slug)) return;
+  installing.add(slug);
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>';
+
+  try {
+    const res = await fetch('/api/marketplace/install', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ owner, repo, slug }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Install failed');
+
+    pollJob(data.job_id, {
+      onDone(job) {
+        installing.delete(slug);
+        if (job.installed.includes(slug)) {
+          btn.textContent = '✓ Installed'; btn.style.background = '#3e8635';
+          updateInstalledBadge();
+          toast(`Installed: ${slug}`);
+        } else {
+          const err = job.failed.find(f => f.slug === slug);
+          btn.disabled = false; btn.textContent = 'Install';
+          toast(err?.reason || 'Install failed', 'error');
+        }
+      },
+      onError(e) {
+        installing.delete(slug);
+        btn.disabled = false; btn.textContent = 'Install';
+        toast(e.message, 'error');
+      },
+    });
+  } catch (e) {
+    installing.delete(slug);
+    btn.disabled = false; btn.textContent = 'Install';
+    toast(e.message, 'error');
+  }
+}
+
+// ── Scan card: install one ─────────────────────────────────────────────────
 async function installOne(slug) {
   const btn = document.getElementById(`scan-btn-${slug}`);
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>'; }
+
   try {
     const res = await fetch('/api/github/install-bulk', {
       method: 'POST',
@@ -434,25 +498,40 @@ async function installOne(slug) {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || 'Install failed');
-    if (data.failed?.length) throw new Error(data.failed[0].reason);
-    if (btn) { btn.textContent = '✓ Installed'; btn.style.background = '#3e8635'; }
-    updateInstalledBadge();
-    toast(`Installed: ${slug}`);
+
+    pollJob(data.job_id, {
+      onDone(job) {
+        if (job.installed.includes(slug)) {
+          if (btn) { btn.textContent = '✓ Installed'; btn.style.background = '#3e8635'; }
+          updateInstalledBadge();
+          toast(`Installed: ${slug}`);
+        } else {
+          const err = job.failed.find(f => f.slug === slug);
+          if (btn) { btn.disabled = false; btn.textContent = 'Install'; }
+          toast(err?.reason || 'Install failed', 'error');
+        }
+      },
+      onError(e) {
+        if (btn) { btn.disabled = false; btn.textContent = 'Install'; }
+        toast(e.message, 'error');
+      },
+    });
   } catch (e) {
     if (btn) { btn.disabled = false; btn.textContent = 'Install'; }
     toast(e.message, 'error');
   }
 }
 
+// ── Scan card: install all ─────────────────────────────────────────────────
 async function installAll() {
-  const btn = document.getElementById('install-all-btn');
+  const allBtn = document.getElementById('install-all-btn');
   const slugs = [];
   document.querySelectorAll('#scan-card-grid button.btn-success').forEach(b => {
     slugs.push(b.id.replace('scan-btn-', ''));
   });
   if (!slugs.length) return;
 
-  if (btn) { btn.disabled = true; btn.innerHTML = `<span class="spinner"></span> Installing ${slugs.length}…`; }
+  if (allBtn) { allBtn.disabled = true; allBtn.innerHTML = `<span class="spinner"></span> Starting…`; }
   slugs.forEach(s => {
     const b = document.getElementById(`scan-btn-${s}`);
     if (b) { b.disabled = true; b.innerHTML = '<span class="spinner"></span>'; }
@@ -467,26 +546,44 @@ async function installAll() {
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || 'Bulk install failed');
 
-    data.installed?.forEach(s => {
-      const b = document.getElementById(`scan-btn-${s}`);
-      if (b) { b.textContent = '✓ Installed'; b.style.background = '#3e8635'; }
-    });
-    data.failed?.forEach(f => {
-      const b = document.getElementById(`scan-btn-${f.slug}`);
-      if (b) { b.disabled = false; b.textContent = 'Retry'; }
-    });
+    // Update progress bar text as job progresses
+    pollJob(data.job_id, {
+      onProgress(job) {
+        const done = job.installed.length + job.failed.length;
+        if (allBtn) allBtn.innerHTML =
+          `<span class="spinner"></span> ${done}/${job.total} installed…`;
+      },
+      onDone(job) {
+        job.installed.forEach(s => {
+          const b = document.getElementById(`scan-btn-${s}`);
+          if (b) { b.textContent = '✓ Installed'; b.style.background = '#3e8635'; }
+        });
+        job.failed.forEach(f => {
+          const b = document.getElementById(`scan-btn-${f.slug}`);
+          if (b) { b.disabled = false; b.textContent = 'Retry'; }
+        });
 
-    updateInstalledBadge();
-    const ok = data.installed?.length || 0;
-    const fail = data.failed?.length || 0;
-    toast(`Installed ${ok} skill${ok !== 1 ? 's' : ''}${fail ? `, ${fail} failed` : ''}`);
-    if (btn) btn.style.display = 'none';
+        updateInstalledBadge();
+        const ok = job.installed.length, fail = job.failed.length;
+        toast(`Installed ${ok} skill${ok !== 1 ? 's' : ''}${fail ? `, ${fail} failed` : ''}`);
+        if (allBtn) allBtn.style.display = 'none';
+      },
+      onError(e) {
+        slugs.forEach(s => {
+          const b = document.getElementById(`scan-btn-${s}`);
+          if (b) { b.disabled = false; b.textContent = 'Install'; }
+        });
+        if (allBtn) { allBtn.disabled = false; allBtn.textContent = `Install all (${slugs.length})`; }
+        toast(e.message, 'error');
+      },
+      intervalMs: 600,
+    });
   } catch (e) {
     slugs.forEach(s => {
       const b = document.getElementById(`scan-btn-${s}`);
       if (b) { b.disabled = false; b.textContent = 'Install'; }
     });
-    if (btn) { btn.disabled = false; btn.textContent = `Install all (${slugs.length})`; }
+    if (allBtn) { allBtn.disabled = false; allBtn.textContent = `Install all (${slugs.length})`; }
     toast(e.message, 'error');
   }
 }
