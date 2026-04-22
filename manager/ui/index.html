@@ -177,20 +177,25 @@
   <!-- ── GitHub install tab ────────────────────────────────────────────── -->
   <div id="tab-github" class="tab-panel">
     <div class="direct-install-box">
-      <div class="label">Install any skill from GitHub</div>
-      <div class="hint">Enter the GitHub repository in <code>owner/repo</code> format.
-        The repo must have a <code>SKILL.md</code> file at its root.</div>
+      <div class="label">Install skills from any GitHub repository</div>
+      <div class="hint">
+        Enter a GitHub URL or <code>owner/repo</code>. We'll scan it for
+        <code>SKILL.md</code> files — single-skill repos and collections both work.
+      </div>
       <div class="search-row" style="margin-bottom:0">
-        <input id="gh-repo" type="text" placeholder="owner/repo  or  https://github.com/owner/repo" style="font-family:monospace"
-               onkeydown="if(event.key==='Enter') installFromGitHub()" />
-        <input id="gh-slug" type="text" placeholder="Local name (optional)"
-               onkeydown="if(event.key==='Enter') installFromGitHub()" />
-        <button class="btn btn-primary" id="gh-btn" onclick="installFromGitHub()">Install</button>
+        <input id="gh-repo" type="text"
+               placeholder="https://github.com/vyogotech/frappe-apps-manager  or  owner/repo"
+               style="font-family:monospace"
+               onkeydown="if(event.key==='Enter') scanRepo()" />
+        <button class="btn btn-primary" id="gh-scan-btn" onclick="scanRepo()">Scan</button>
       </div>
     </div>
-    <div class="tips">
-      Tips: search <a href="https://github.com/search?q=SKILL.md+in%3Apath&type=repositories" target="_blank">GitHub for SKILL.md repos</a>
-      or browse <a href="https://agentskillhub.dev" target="_blank">agentskillhub.dev</a>.
+
+    <div id="gh-results" style="margin-top:1rem"></div>
+
+    <div class="tips" style="margin-top:0.75rem">
+      Try: <code>vyogotech/frappe-apps-manager</code> · <code>anthropics/skills</code> ·
+      <a href="https://github.com/search?q=SKILL.md+in%3Apath&type=repositories" target="_blank">Search GitHub for more</a>
     </div>
   </div>
 </main>
@@ -343,9 +348,8 @@ async function installFromCard(btn) {
   }
 }
 
-// ── Direct GitHub install ──────────────────────────────────────────────────
+// ── GitHub repo scan + bulk install ───────────────────────────────────────
 function parseGitHubInput(raw) {
-  // Accept:  https://github.com/owner/repo  or  owner/repo
   raw = raw.trim().replace(/\.git$/, '');
   const urlMatch = raw.match(/github\.com\/([^/]+)\/([^/?\s]+)/);
   if (urlMatch) return { owner: urlMatch[1], repo: urlMatch[2] };
@@ -354,37 +358,136 @@ function parseGitHubInput(raw) {
   return null;
 }
 
-async function installFromGitHub() {
-  const repoInput = document.getElementById('gh-repo').value.trim();
-  const slugInput = document.getElementById('gh-slug').value.trim();
-  const parsed = parseGitHubInput(repoInput);
-  if (!parsed) {
-    toast('Enter owner/repo or a GitHub URL', 'error'); return;
-  }
-  const { owner, repo } = parsed;
-  const slug = slugInput || `${owner}-${repo}`.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+let scannedOwner = '', scannedRepo = '';
 
-  const btn = document.getElementById('gh-btn');
+async function scanRepo() {
+  const repoInput = document.getElementById('gh-repo').value.trim();
+  const parsed = parseGitHubInput(repoInput);
+  if (!parsed) { toast('Enter owner/repo or a GitHub URL', 'error'); return; }
+
+  const btn = document.getElementById('gh-scan-btn');
   btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span> Installing…';
+  btn.innerHTML = '<span class="spinner"></span> Scanning…';
+  document.getElementById('gh-results').innerHTML =
+    '<div class="empty"><span class="spinner"></span> Scanning repository for skills…</div>';
 
   try {
-    const res = await fetch('/api/marketplace/install', {
+    const res = await fetch(`/api/github/scan?repo_url=${encodeURIComponent(repoInput)}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Scan failed');
+    scannedOwner = data.owner;
+    scannedRepo  = data.repo;
+    renderScanResults(data);
+  } catch (e) {
+    document.getElementById('gh-results').innerHTML =
+      `<div class="empty">Error: ${escHtml(e.message)}</div>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Scan';
+  }
+}
+
+function renderScanResults(data) {
+  const el = document.getElementById('gh-results');
+  if (!data.skills.length) {
+    el.innerHTML = `<div class="empty">No SKILL.md files found in <strong>${escHtml(data.owner)}/${escHtml(data.repo)}</strong>.</div>`;
+    return;
+  }
+
+  const uninstalled = data.skills.filter(s => !s.installed);
+  el.innerHTML = `
+    <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.75rem;flex-wrap:wrap">
+      <div class="section-title" style="margin:0">
+        ${escHtml(data.owner)}/${escHtml(data.repo)}
+        <span class="count-badge">${data.count} skills</span>
+      </div>
+      ${uninstalled.length ? `
+        <button class="btn btn-primary" onclick="installAll()" id="install-all-btn">
+          Install all (${uninstalled.length})
+        </button>` : '<span style="font-size:0.8rem;color:#3e8635;font-weight:600">✓ All installed</span>'}
+    </div>
+    <div class="card-grid" id="scan-card-grid">
+      ${data.skills.map(s => `
+        <div class="card" id="scan-card-${escAttr(s.slug)}">
+          <div class="card-name">${escHtml(s.name || s.slug)}</div>
+          <div class="card-meta">${escHtml(s.path)}</div>
+          <div class="card-desc">${escHtml(truncate(s.description || 'No description.', 140))}</div>
+          <div class="card-actions">
+            ${s.installed
+              ? `<span style="font-size:0.8rem;color:#3e8635;font-weight:600">✓ Installed</span>`
+              : `<button class="btn btn-success" id="scan-btn-${escAttr(s.slug)}"
+                   onclick="installOne('${escAttr(s.slug)}')">Install</button>`
+            }
+          </div>
+        </div>`).join('')}
+    </div>`;
+}
+
+async function installOne(slug) {
+  const btn = document.getElementById(`scan-btn-${slug}`);
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>'; }
+  try {
+    const res = await fetch('/api/github/install-bulk', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ owner, repo, slug }),
+      body: JSON.stringify({ owner: scannedOwner, repo: scannedRepo, slugs: [slug] }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || 'Install failed');
-    document.getElementById('gh-repo').value = '';
-    document.getElementById('gh-slug').value = '';
+    if (data.failed?.length) throw new Error(data.failed[0].reason);
+    if (btn) { btn.textContent = '✓ Installed'; btn.style.background = '#3e8635'; }
     updateInstalledBadge();
     toast(`Installed: ${slug}`);
   } catch (e) {
+    if (btn) { btn.disabled = false; btn.textContent = 'Install'; }
     toast(e.message, 'error');
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'Install';
+  }
+}
+
+async function installAll() {
+  const btn = document.getElementById('install-all-btn');
+  const slugs = [];
+  document.querySelectorAll('#scan-card-grid button.btn-success').forEach(b => {
+    slugs.push(b.id.replace('scan-btn-', ''));
+  });
+  if (!slugs.length) return;
+
+  if (btn) { btn.disabled = true; btn.innerHTML = `<span class="spinner"></span> Installing ${slugs.length}…`; }
+  slugs.forEach(s => {
+    const b = document.getElementById(`scan-btn-${s}`);
+    if (b) { b.disabled = true; b.innerHTML = '<span class="spinner"></span>'; }
+  });
+
+  try {
+    const res = await fetch('/api/github/install-bulk', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ owner: scannedOwner, repo: scannedRepo, slugs }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Bulk install failed');
+
+    data.installed?.forEach(s => {
+      const b = document.getElementById(`scan-btn-${s}`);
+      if (b) { b.textContent = '✓ Installed'; b.style.background = '#3e8635'; }
+    });
+    data.failed?.forEach(f => {
+      const b = document.getElementById(`scan-btn-${f.slug}`);
+      if (b) { b.disabled = false; b.textContent = 'Retry'; }
+    });
+
+    updateInstalledBadge();
+    const ok = data.installed?.length || 0;
+    const fail = data.failed?.length || 0;
+    toast(`Installed ${ok} skill${ok !== 1 ? 's' : ''}${fail ? `, ${fail} failed` : ''}`);
+    if (btn) btn.style.display = 'none';
+  } catch (e) {
+    slugs.forEach(s => {
+      const b = document.getElementById(`scan-btn-${s}`);
+      if (b) { b.disabled = false; b.textContent = 'Install'; }
+    });
+    if (btn) { btn.disabled = false; btn.textContent = `Install all (${slugs.length})`; }
+    toast(e.message, 'error');
   }
 }
 

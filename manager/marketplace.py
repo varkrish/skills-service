@@ -106,6 +106,94 @@ async def browse_all_marketplace() -> list[dict]:
     return result
 
 
+async def scan_github_repo(owner: str, repo: str) -> list[dict]:
+    """
+    Scan a GitHub repo for SKILL.md files and return all discovered skills.
+
+    Checks these directory layouts (in priority order):
+      .cursor/skills/<slug>/SKILL.md   — Cursor skill collections (e.g. vyogotech/frappe-apps-manager)
+      skills/<slug>/SKILL.md           — agentskill.sh style monorepos
+      <slug>/SKILL.md                  — flat monorepos
+      SKILL.md                         — single-skill repos (root)
+    """
+    GITHUB_API = "https://api.github.com"
+    headers = {"Accept": "application/vnd.github+json", "User-Agent": "skill-manager/1.0"}
+    found: list[dict] = []
+
+    async with httpx.AsyncClient(timeout=15, follow_redirects=True, headers=headers) as client:
+        # Try each known skill directory prefix
+        for prefix in (".cursor/skills", "skills"):
+            url = f"{GITHUB_API}/repos/{owner}/{repo}/contents/{prefix}"
+            r = await client.get(url)
+            if r.status_code != 200:
+                continue
+            entries = r.json()
+            if not isinstance(entries, list):
+                continue
+            for entry in entries:
+                if entry.get("type") != "dir":
+                    continue
+                slug = entry["name"]
+                # Check if SKILL.md exists inside this dir
+                skill_md_url = f"{GITHUB_API}/repos/{owner}/{repo}/contents/{prefix}/{slug}/SKILL.md"
+                sr = await client.get(skill_md_url)
+                if sr.status_code == 200:
+                    meta = sr.json()
+                    raw_url = meta.get("download_url", "")
+                    # Fetch actual content for name/description from frontmatter
+                    name, description = slug, ""
+                    if raw_url:
+                        cr = await client.get(raw_url)
+                        if cr.status_code == 200:
+                            name, description = _parse_frontmatter(cr.text, slug)
+                    found.append({
+                        "slug": slug,
+                        "name": name,
+                        "description": description,
+                        "path": f"{prefix}/{slug}/SKILL.md",
+                        "raw_url": raw_url,
+                    })
+            if found:
+                break  # found skills in this prefix, don't search further
+
+        # Fallback: check root SKILL.md (single-skill repo)
+        if not found:
+            r = await client.get(f"{GITHUB_API}/repos/{owner}/{repo}/contents/SKILL.md")
+            if r.status_code == 200:
+                meta = r.json()
+                raw_url = meta.get("download_url", "")
+                name, description = repo, ""
+                if raw_url:
+                    cr = await client.get(raw_url)
+                    if cr.status_code == 200:
+                        name, description = _parse_frontmatter(cr.text, repo)
+                found.append({
+                    "slug": repo.lower(),
+                    "name": name,
+                    "description": description,
+                    "path": "SKILL.md",
+                    "raw_url": raw_url,
+                })
+
+    return found
+
+
+def _parse_frontmatter(content: str, fallback_name: str) -> tuple[str, str]:
+    """Extract name and description from YAML frontmatter."""
+    name, description = fallback_name, ""
+    if content.startswith("---"):
+        parts = content.split("---", 2)
+        if len(parts) >= 3:
+            try:
+                import yaml
+                fm = yaml.safe_load(parts[1]) or {}
+                name = fm.get("name", fallback_name)
+                description = fm.get("description", "")
+            except Exception:
+                pass
+    return name, description
+
+
 async def fetch_skill_md(owner: str, repo: str, slug: str = "") -> str:
     """
     Fetch SKILL.md from GitHub for a given owner/repo.

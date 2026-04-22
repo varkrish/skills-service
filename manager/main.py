@@ -162,6 +162,79 @@ async def list_installed():
     return {"skills": skills, "count": len(skills)}
 
 
+@app.get("/api/github/scan")
+async def scan_github_repo(repo_url: str):
+    """
+    Scan a GitHub repo for all SKILL.md files.
+    Accepts full GitHub URLs or owner/repo format.
+    Returns a list of discovered skills (not yet installed).
+    """
+    import re as _re
+    url = repo_url.strip().rstrip("/").replace(".git", "")
+    m = _re.search(r"github\.com/([^/]+)/([^/?\s]+)", url)
+    if m:
+        owner, repo = m.group(1), m.group(2)
+    elif "/" in url:
+        parts = url.split("/")
+        owner, repo = parts[-2], parts[-1]
+    else:
+        raise HTTPException(status_code=400, detail="Provide a GitHub URL or owner/repo")
+
+    try:
+        skills = await mkt.scan_github_repo(owner, repo)
+        installed_slugs = {d.name for d in MARKETPLACE_DIR.iterdir() if d.is_dir()}
+        for s in skills:
+            s["installed"] = s["slug"] in installed_slugs
+        return {"owner": owner, "repo": repo, "skills": skills, "count": len(skills)}
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"GitHub unreachable: {exc}")
+
+
+class BulkInstallRequest(BaseModel):
+    owner: str
+    repo: str
+    slugs: list[str]   # which skills from the scan to install
+
+
+@app.post("/api/github/install-bulk", status_code=202)
+async def install_bulk(req: BulkInstallRequest, background_tasks: BackgroundTasks):
+    """Install multiple skills from a scanned GitHub repo."""
+    # Re-scan to get raw_urls, then write each SKILL.md
+    try:
+        all_skills = await mkt.scan_github_repo(req.owner, req.repo)
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"GitHub unreachable: {exc}")
+
+    by_slug = {s["slug"]: s for s in all_skills}
+    installed, skipped, failed = [], [], []
+
+    for slug in req.slugs:
+        skill = by_slug.get(slug)
+        if not skill:
+            failed.append({"slug": slug, "reason": "not found in repo"})
+            continue
+        skill_dir = MARKETPLACE_DIR / slug
+        try:
+            if skill.get("raw_url"):
+                async with httpx.AsyncClient(timeout=15) as client:
+                    r = await client.get(skill["raw_url"])
+                    r.raise_for_status()
+                    content = r.text
+            else:
+                content = await mkt.fetch_skill_md(req.owner, req.repo, slug)
+            skill_dir.mkdir(parents=True, exist_ok=True)
+            (skill_dir / "SKILL.md").write_text(content, encoding="utf-8")
+            installed.append(slug)
+            logger.info("Bulk installed skill: %s", slug)
+        except Exception as exc:
+            failed.append({"slug": slug, "reason": str(exc)})
+
+    if installed:
+        background_tasks.add_task(mkt.trigger_reindex, SKILLS_SERVICE_URL)
+
+    return {"installed": installed, "skipped": skipped, "failed": failed}
+
+
 @app.delete("/api/installed/{slug}", status_code=204)
 async def delete_skill(slug: str, background_tasks: BackgroundTasks):
     """Remove a marketplace-installed skill and trigger reindex."""
