@@ -222,31 +222,43 @@ function toast(msg, type = 'success') {
 // ── Marketplace search ────────────────────────────────────────────────────
 async function loadFeatured() {
   document.getElementById('mkt-query').value = '';
-  await doSearch('');
-}
-
-async function searchMarketplace() {
-  const q = document.getElementById('mkt-query').value.trim();
-  await doSearch(q);
-}
-
-async function doSearch(q) {
   const btn = document.getElementById('mkt-btn');
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span>';
   document.getElementById('mkt-results').innerHTML =
-    '<div class="empty"><span class="spinner"></span> Searching agentskill.sh…</div>';
+    '<div class="empty"><span class="spinner"></span> Loading all marketplace skills…</div>';
+  document.getElementById('mkt-section-title').style.display = 'none';
+  try {
+    const res = await fetch('/api/marketplace/browse');
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Failed to load');
+    renderResults(data.results || [], `All skills (${data.count})`);
+  } catch (e) {
+    document.getElementById('mkt-results').innerHTML =
+      `<div class="empty">Error: ${escHtml(e.message)}</div>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Search';
+  }
+}
+
+async function searchMarketplace() {
+  const q = document.getElementById('mkt-query').value.trim();
+  if (!q) { loadFeatured(); return; }
+  if (q.length < 2) { toast('Enter at least 2 characters', 'error'); return; }
+
+  const btn = document.getElementById('mkt-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>';
+  document.getElementById('mkt-results').innerHTML =
+    '<div class="empty"><span class="spinner"></span> Searching…</div>';
   document.getElementById('mkt-section-title').style.display = 'none';
 
   try {
-    const url = q.length >= 2
-      ? `/api/marketplace/search?q=${encodeURIComponent(q)}&limit=10`
-      : `/api/marketplace/search?limit=10`;
-    const res = await fetch(url);
+    const res = await fetch(`/api/marketplace/search?q=${encodeURIComponent(q)}&limit=10`);
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || 'Search failed');
-    const label = data.featured ? 'All available skills' : `Results for "${q}"`;
-    renderResults(data.results || [], label);
+    renderResults(data.results || [], `Results for "${q}"`);
   } catch (e) {
     document.getElementById('mkt-results').innerHTML =
       `<div class="empty">Error: ${escHtml(e.message)}</div>`;
@@ -273,12 +285,10 @@ function renderResults(results, label) {
   if (!results.length) {
     el.innerHTML = `
       <div class="empty">
-        No skills found for this query.<br>
+        No skills found for this search.<br>
         <span style="font-size:0.8rem;margin-top:0.5rem;display:block">
-          The marketplace is early — try: <code>mcp</code>, <code>code</code>,
-          <code>acceptance</code>, <code>spreadsheet</code>, or
-          <button class="btn btn-secondary" style="padding:0.2rem 0.5rem;font-size:0.8rem;margin-left:4px"
-            onclick="loadFeatured()">Browse all</button>
+          <button class="btn btn-secondary" style="padding:0.2rem 0.6rem;font-size:0.8rem"
+            onclick="loadFeatured()">Browse all skills</button>
         </span>
       </div>`;
     return;

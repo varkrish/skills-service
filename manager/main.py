@@ -65,29 +65,30 @@ async def health():
     return {"status": "ok", "service": "skill-manager"}
 
 
-@app.get("/api/marketplace/search")
-async def search_marketplace(q: str = "", limit: int = 10):
+@app.get("/api/marketplace/browse")
+async def browse_marketplace():
     """
-    Search agentskill.sh for skills matching the query.
-    If q is empty, returns a broad set of featured/available skills.
+    Return all discoverable marketplace skills by fanning out across
+    broad queries and deduplicating. Results are cached for 5 minutes.
     """
-    effective_q = q.strip() if q else "ab"  # "ab" returns all available skills
-    if len(effective_q) < 2:
-        raise HTTPException(status_code=400, detail="Query must be at least 2 characters")
     try:
-        results = await mkt.search_marketplace(effective_q, min(limit, 10))
-        return {"results": results, "query": q, "featured": not bool(q.strip())}
+        skills = await mkt.browse_all_marketplace()
+        return {"results": skills, "count": len(skills)}
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=502, detail=f"Marketplace unreachable: {exc}")
 
 
-@app.post("/api/marketplace/install-direct", status_code=202)
-async def install_skill_direct(req: InstallRequest, background_tasks: BackgroundTasks):
-    """
-    Install a skill directly from a GitHub owner/repo without marketplace search.
-    Accepts any public GitHub repo that has a SKILL.md at its root.
-    """
-    return await install_skill(req, background_tasks)
+@app.get("/api/marketplace/search")
+async def search_marketplace(q: str, limit: int = 10):
+    """Search agentskill.sh for skills matching q (min 2 chars)."""
+    q = q.strip()
+    if len(q) < 2:
+        raise HTTPException(status_code=400, detail="Query must be at least 2 characters")
+    try:
+        results = await mkt.search_marketplace(q, min(limit, 10))
+        return {"results": results, "query": q, "count": len(results)}
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"Marketplace unreachable: {exc}")
 
 
 @app.post("/api/marketplace/install", status_code=202)
