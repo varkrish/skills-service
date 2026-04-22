@@ -83,7 +83,8 @@ def _resolve_base_dirs() -> List[Path]:
     """Parse SKILLS_BASE_DIRS (colon-separated) or fall back to SKILLS_BASE_DIR."""
     multi = os.environ.get("SKILLS_BASE_DIRS")
     if multi:
-        return [Path(p.strip()) for p in multi.split(":") if p.strip()]
+        sep = "," if "," in multi else ":"
+        return [Path(p.strip()) for p in multi.split(sep) if p.strip()]
     return [Path(os.environ.get("SKILLS_BASE_DIR", "/app/skills"))]
 
 
