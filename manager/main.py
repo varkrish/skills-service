@@ -97,11 +97,25 @@ async def install_skill(req: InstallRequest, background_tasks: BackgroundTasks):
     Download SKILL.md from GitHub and save to the marketplace volume.
     Triggers skills-service reindex in the background.
     """
-    slug = req.slug.strip().lower().replace(" ", "-") or f"{req.owner}-{req.repo}"
+    import re as _re
+
+    def _parse_gh(s: str) -> str:
+        """Strip GitHub URL prefix if a full URL was passed."""
+        s = s.strip().rstrip("/")
+        m = _re.search(r"github\.com/([^/]+/[^/?\s]+)", s)
+        return m.group(1) if m else s
+
+    owner = _parse_gh(req.owner).split("/")[0] if "/" in _parse_gh(req.owner) else req.owner.strip()
+    repo  = req.repo.strip()
+    # If owner field contained a full "owner/repo" string, split it
+    if "/" in owner:
+        owner, repo = owner.split("/", 1)
+
+    slug = req.slug.strip().lower().replace(" ", "-") or f"{owner}-{repo}".lower().replace("/", "-")
     skill_dir = MARKETPLACE_DIR / slug
 
     try:
-        content = await mkt.fetch_skill_md(req.owner, req.repo, slug)
+        content = await mkt.fetch_skill_md(owner, repo, slug)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
     except httpx.HTTPError as exc:
@@ -109,7 +123,7 @@ async def install_skill(req: InstallRequest, background_tasks: BackgroundTasks):
 
     skill_dir.mkdir(parents=True, exist_ok=True)
     (skill_dir / "SKILL.md").write_text(content, encoding="utf-8")
-    logger.info("Installed skill %s from %s/%s", slug, req.owner, req.repo)
+    logger.info("Installed skill %s from %s/%s", slug, owner, repo)
 
     background_tasks.add_task(mkt.trigger_reindex, SKILLS_SERVICE_URL)
     return {"status": "installed", "slug": slug}

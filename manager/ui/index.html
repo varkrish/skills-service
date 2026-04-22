@@ -181,7 +181,7 @@
       <div class="hint">Enter the GitHub repository in <code>owner/repo</code> format.
         The repo must have a <code>SKILL.md</code> file at its root.</div>
       <div class="search-row" style="margin-bottom:0">
-        <input id="gh-repo" type="text" placeholder="e.g.  anthropics/skills" style="font-family:monospace"
+        <input id="gh-repo" type="text" placeholder="owner/repo  or  https://github.com/owner/repo" style="font-family:monospace"
                onkeydown="if(event.key==='Enter') installFromGitHub()" />
         <input id="gh-slug" type="text" placeholder="Local name (optional)"
                onkeydown="if(event.key==='Enter') installFromGitHub()" />
@@ -344,13 +344,24 @@ async function installFromCard(btn) {
 }
 
 // ── Direct GitHub install ──────────────────────────────────────────────────
+function parseGitHubInput(raw) {
+  // Accept:  https://github.com/owner/repo  or  owner/repo
+  raw = raw.trim().replace(/\.git$/, '');
+  const urlMatch = raw.match(/github\.com\/([^/]+)\/([^/?\s]+)/);
+  if (urlMatch) return { owner: urlMatch[1], repo: urlMatch[2] };
+  const parts = raw.split('/').filter(Boolean);
+  if (parts.length >= 2) return { owner: parts[0], repo: parts[1] };
+  return null;
+}
+
 async function installFromGitHub() {
   const repoInput = document.getElementById('gh-repo').value.trim();
   const slugInput = document.getElementById('gh-slug').value.trim();
-  if (!repoInput.includes('/')) {
-    toast('Enter in owner/repo format', 'error'); return;
+  const parsed = parseGitHubInput(repoInput);
+  if (!parsed) {
+    toast('Enter owner/repo or a GitHub URL', 'error'); return;
   }
-  const [owner, repo] = repoInput.split('/', 2);
+  const { owner, repo } = parsed;
   const slug = slugInput || `${owner}-${repo}`.toLowerCase().replace(/[^a-z0-9-]/g, '-');
 
   const btn = document.getElementById('gh-btn');
