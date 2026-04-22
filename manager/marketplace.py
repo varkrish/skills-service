@@ -1,181 +1,228 @@
 """
 agentskill.sh marketplace client.
 
-API: https://agentskillhub.dev/api/v1/search?q=<query>
-Response shape: {"skills": [{slug, name, description, totalInstalls, sourceIdentifier}, ...]}
+API: https://agentskill.sh/api/skills
+Response shape: {
+    "data": [{slug, name, description, githubOwner, githubRepo, githubPath, ...}],
+    "total": int,
+    "page": int,
+    "limit": int,
+    "totalPages": int,
+    "hasMore": bool,
+}
 
-sourceIdentifier is "owner/repo" on GitHub (e.g. "anthropics/skills").
-
-NOTE: The API returns max 10 results per query with no pagination that works
-reliably. To enumerate all ~80+ skills we fan out across a set of broad queries
-and deduplicate by slug.
+The API supports:
+  - Search:     ?q=<query>
+  - Pagination: ?page=N&limit=N  (max 100 per page)
+  - Sorting:    ?sort=trending|top|hot|latest
+  - Categories: ?category=development|marketing|...
 """
 import asyncio
 import logging
-import time
+import os
 import httpx
 
 logger = logging.getLogger(__name__)
 
-AGENTSKILL_API = "https://agentskillhub.dev/api/v1/search"
+GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
 
-# Broad queries that together cover most/all available skills.
-# Chosen empirically — common words/substrings that appear in many SKILL.md files.
-BROWSE_QUERIES = [
-    "the", "ab", "code", "skill", "agent", "build", "test",
-    "api", "data", "app", "cloud", "git", "ci", "dev", "web", "ai",
-    "video", "plan", "er", "an",
-]
-
-# Simple in-process cache so browsing the page doesn't hammer the API
-_browse_cache: dict = {"ts": 0.0, "skills": []}
-CACHE_TTL = 300  # 5 minutes
-
-
-def _parse_source(source_identifier: str) -> tuple[str, str]:
-    parts = source_identifier.split("/", 1)
-    if len(parts) == 2:
-        return parts[0], parts[1]
-    return "", source_identifier
+AGENTSKILL_API = "https://agentskill.sh/api/skills"
+MAX_PAGE_SIZE = 100
 
 
 def _normalize(raw_skill: dict) -> dict:
-    source = raw_skill.get("sourceIdentifier", "")
-    owner, repo = _parse_source(source)
-    slug = raw_skill.get("slug", f"{owner}-{repo}".lower())
+    owner = raw_skill.get("githubOwner", "")
+    repo = raw_skill.get("githubRepo", "")
+    raw_slug = raw_skill.get("slug", f"{owner}-{repo}".lower())
+    # agentskill.sh slugs are "owner/skill-name" — strip the owner prefix
+    # so local directory names stay clean (e.g. "k8s-operator" not "hawkli-1994/k8s-operator")
+    slug = raw_slug.split("/", 1)[-1] if "/" in raw_slug else raw_slug
+    # Preserve the full slug for the agentskill.sh page URL: /@owner/skill-name
+    marketplace_url = f"https://agentskill.sh/@{raw_slug}" if raw_slug else ""
+    github_path = raw_skill.get("githubPath", "")
+    # Normalize case-insensitive filename variants (e.g. "skill.md" → "SKILL.md")
+    branch = raw_skill.get("githubBranch", "")
     return {
         "slug": slug,
         "name": raw_skill.get("name", slug),
         "description": raw_skill.get("description", ""),
         "owner": owner,
         "repo": repo,
-        "sourceIdentifier": source,
-        "totalInstalls": raw_skill.get("totalInstalls", 0),
+        "sourceIdentifier": f"{owner}/{repo}" if owner and repo else "",
+        "installCount": raw_skill.get("installCount", 0),
+        "contentQualityScore": raw_skill.get("contentQualityScore", 0),
+        "securityScore": raw_skill.get("securityScore", 0),
+        "category": raw_skill.get("category", ""),
+        "platforms": raw_skill.get("platforms", []),
+        "tags": raw_skill.get("tags", []),
+        "githubPath": github_path,
+        "githubBranch": branch,
+        "avatarUrl": raw_skill.get("avatarUrl", ""),
+        "trendingScore": raw_skill.get("trendingScore", 0),
+        "marketplaceUrl": marketplace_url,
     }
 
 
-async def _fetch_one(client: httpx.AsyncClient, q: str) -> list[dict]:
-    try:
-        r = await client.get(AGENTSKILL_API, params={"q": q}, timeout=8)
+async def search_marketplace(
+    q: str = "",
+    page: int = 1,
+    limit: int = 20,
+    sort: str = "",
+    category: str = "",
+) -> dict:
+    """
+    Search agentskill.sh marketplace.
+
+    Returns dict with keys: results, total, page, totalPages, hasMore.
+    """
+    limit = min(max(limit, 1), MAX_PAGE_SIZE)
+    params: dict = {"page": page, "limit": limit}
+    if q:
+        params["q"] = q
+    if sort:
+        params["sort"] = sort
+    if category:
+        params["category"] = category
+
+    async with httpx.AsyncClient(timeout=15) as client:
+        r = await client.get(AGENTSKILL_API, params=params)
         r.raise_for_status()
-        return r.json().get("skills", [])
-    except Exception as exc:
-        logger.debug("marketplace query %r failed: %s", q, exc)
-        return []
+        data = r.json()
+
+    skills = [_normalize(s) for s in data.get("data", [])]
+    return {
+        "results": skills,
+        "total": data.get("total", len(skills)),
+        "page": data.get("page", page),
+        "totalPages": data.get("totalPages", 1),
+        "hasMore": data.get("hasMore", False),
+    }
 
 
-async def search_marketplace(q: str, limit: int = 10) -> list[dict]:
-    """Search agentskill.sh for skills matching q."""
-    async with httpx.AsyncClient() as client:
-        raw = await _fetch_one(client, q)
-    return [_normalize(s) for s in raw[:limit]]
-
-
-async def browse_all_marketplace() -> list[dict]:
-    """
-    Return all discoverable marketplace skills by fanning out across
-    BROWSE_QUERIES in parallel and deduplicating by slug.
-    Results are cached for CACHE_TTL seconds.
-    """
-    now = time.monotonic()
-    if _browse_cache["skills"] and now - _browse_cache["ts"] < CACHE_TTL:
-        return _browse_cache["skills"]
-
-    async with httpx.AsyncClient() as client:
-        batches = await asyncio.gather(
-            *[_fetch_one(client, q) for q in BROWSE_QUERIES],
-            return_exceptions=True,
-        )
-
-    seen: set[str] = set()
-    result: list[dict] = []
-    for batch in batches:
-        if isinstance(batch, list):
-            for s in batch:
-                norm = _normalize(s)
-                if norm["slug"] not in seen:
-                    seen.add(norm["slug"])
-                    result.append(norm)
-
-    # Sort by totalInstalls desc, then name
-    result.sort(key=lambda s: (-s["totalInstalls"], s["name"]))
-
-    _browse_cache["ts"] = now
-    _browse_cache["skills"] = result
-    logger.info("Marketplace browse: discovered %d unique skills", len(result))
-    return result
+def _github_headers() -> dict[str, str]:
+    """Build GitHub API headers, with optional auth token for higher rate limits."""
+    h = {"Accept": "application/vnd.github+json", "User-Agent": "skill-manager/1.0"}
+    token = GITHUB_TOKEN
+    if token:
+        h["Authorization"] = f"Bearer {token}"
+    return h
 
 
 async def scan_github_repo(owner: str, repo: str) -> list[dict]:
     """
-    Scan a GitHub repo for SKILL.md files and return all discovered skills.
+    Scan a GitHub repo for every SKILL.md file regardless of directory layout.
 
-    Checks these directory layouts (in priority order):
-      .cursor/skills/<slug>/SKILL.md   — Cursor skill collections (e.g. vyogotech/frappe-apps-manager)
-      skills/<slug>/SKILL.md           — agentskill.sh style monorepos
-      <slug>/SKILL.md                  — flat monorepos
-      SKILL.md                         — single-skill repos (root)
+    Uses the Git tree API (single recursive call) to find all paths ending in
+    SKILL.md, then fetches content in parallel from raw.githubusercontent.com
+    for name/description extraction.
+
+    When the tree API is rate-limited (403), falls back to probing common raw
+    URLs directly (raw.githubusercontent.com is never rate-limited).
     """
     GITHUB_API = "https://api.github.com"
-    headers = {"Accept": "application/vnd.github+json", "User-Agent": "skill-manager/1.0"}
-    found: list[dict] = []
+    headers = _github_headers()
 
-    async with httpx.AsyncClient(timeout=15, follow_redirects=True, headers=headers) as client:
-        # Try each known skill directory prefix
-        for prefix in (".cursor/skills", "skills"):
-            url = f"{GITHUB_API}/repos/{owner}/{repo}/contents/{prefix}"
-            r = await client.get(url)
-            if r.status_code != 200:
-                continue
-            entries = r.json()
-            if not isinstance(entries, list):
-                continue
-            for entry in entries:
-                if entry.get("type") != "dir":
-                    continue
-                slug = entry["name"]
-                # Check if SKILL.md exists inside this dir
-                skill_md_url = f"{GITHUB_API}/repos/{owner}/{repo}/contents/{prefix}/{slug}/SKILL.md"
-                sr = await client.get(skill_md_url)
-                if sr.status_code == 200:
-                    meta = sr.json()
-                    raw_url = meta.get("download_url", "")
-                    # Fetch actual content for name/description from frontmatter
-                    name, description = slug, ""
-                    if raw_url:
-                        cr = await client.get(raw_url)
-                        if cr.status_code == 200:
-                            name, description = _parse_frontmatter(cr.text, slug)
-                    found.append({
-                        "slug": slug,
-                        "name": name,
-                        "description": description,
-                        "path": f"{prefix}/{slug}/SKILL.md",
-                        "raw_url": raw_url,
-                    })
-            if found:
-                break  # found skills in this prefix, don't search further
-
-        # Fallback: check root SKILL.md (single-skill repo)
-        if not found:
-            r = await client.get(f"{GITHUB_API}/repos/{owner}/{repo}/contents/SKILL.md")
+    async with httpx.AsyncClient(timeout=20, follow_redirects=True, headers=headers) as client:
+        tree: list[dict] = []
+        branch = "main"
+        for b in ("main", "master"):
+            r = await client.get(
+                f"{GITHUB_API}/repos/{owner}/{repo}/git/trees/{b}",
+                params={"recursive": "1"},
+            )
             if r.status_code == 200:
-                meta = r.json()
-                raw_url = meta.get("download_url", "")
-                name, description = repo, ""
-                if raw_url:
-                    cr = await client.get(raw_url)
-                    if cr.status_code == 200:
-                        name, description = _parse_frontmatter(cr.text, repo)
-                found.append({
-                    "slug": repo.lower(),
-                    "name": name,
-                    "description": description,
-                    "path": "SKILL.md",
-                    "raw_url": raw_url,
-                })
+                tree = r.json().get("tree", [])
+                branch = b
+                break
+            if r.status_code == 403:
+                logger.warning("GitHub tree API rate-limited for %s/%s, trying raw fallback", owner, repo)
+                break
 
-    return found
+        if not tree:
+            return await _scan_via_raw_probing(client, owner, repo)
+
+        skill_paths: list[str] = [
+            item["path"] for item in tree
+            if item.get("type") == "blob"
+            and item["path"].endswith("SKILL.md")
+        ]
+
+        if not skill_paths:
+            return []
+
+        raw_base = f"https://raw.githubusercontent.com/{owner}/{repo}/{branch}"
+
+        async def _fetch_one(path: str) -> dict | None:
+            parts = path.split("/")
+            slug = parts[-2] if len(parts) >= 2 else repo.lower()
+
+            raw_url = f"{raw_base}/{path}"
+            name, description = slug, ""
+            try:
+                cr = await client.get(raw_url)
+                if cr.status_code == 200:
+                    name, description = _parse_frontmatter(cr.text, slug)
+            except Exception:
+                pass
+
+            return {
+                "slug": slug,
+                "name": name,
+                "description": description,
+                "path": path,
+                "raw_url": raw_url,
+            }
+
+        results = await asyncio.gather(
+            *[_fetch_one(p) for p in skill_paths],
+            return_exceptions=True,
+        )
+        return [r for r in results if isinstance(r, dict)]
+
+
+async def _scan_via_raw_probing(
+    client: httpx.AsyncClient, owner: str, repo: str,
+) -> list[dict]:
+    """
+    Last-resort scanner when the GitHub API is rate-limited.
+    Probes raw.githubusercontent.com directly (never rate-limited)
+    for common SKILL.md locations.
+    """
+    branch = "main"
+    for b in ("main", "master"):
+        r = await client.get(
+            f"https://raw.githubusercontent.com/{owner}/{repo}/{b}/README.md"
+        )
+        if r.status_code == 200:
+            branch = b
+            break
+
+    raw_base = f"https://raw.githubusercontent.com/{owner}/{repo}/{branch}"
+    candidates = [
+        "skill/SKILL.md",
+        "SKILL.md",
+    ]
+
+    for path in candidates:
+        raw_url = f"{raw_base}/{path}"
+        cr = await client.get(raw_url)
+        if cr.status_code == 200:
+            slug = repo.lower()
+            name, description = _parse_frontmatter(cr.text, slug)
+            return [{
+                "slug": slug,
+                "name": name,
+                "description": description,
+                "path": path,
+                "raw_url": raw_url,
+            }]
+
+    logger.warning(
+        "GitHub API rate-limited and raw probing found nothing for %s/%s. "
+        "Set GITHUB_TOKEN env var for 5000 requests/hour.",
+        owner, repo,
+    )
+    return []
 
 
 def _parse_frontmatter(content: str, fallback_name: str) -> tuple[str, str]:
@@ -194,21 +241,26 @@ def _parse_frontmatter(content: str, fallback_name: str) -> tuple[str, str]:
     return name, description
 
 
-async def fetch_skill_md(owner: str, repo: str, slug: str = "") -> str:
+async def fetch_skill_md(
+    owner: str, repo: str, slug: str = "", github_path: str = "",
+) -> str:
     """
     Fetch SKILL.md from GitHub for a given owner/repo.
 
-    Tries multiple candidate paths because the marketplace uses two layouts:
-      1. Monorepo: skills/<slug>/SKILL.md  (e.g. anthropics/skills, agilebydesign/agilebydesign-skills)
-      2. Single-skill repo: SKILL.md at root
-      3. Repo name as subdirectory: <repo>/SKILL.md
-
-    Both main and master branches are tried for each path.
+    If github_path is provided (from agentskill.sh metadata), it is tried
+    first as the exact path. Otherwise falls back to probing multiple
+    candidate paths for different repo layouts.
     """
     candidates = []
+    if github_path:
+        candidates.append(github_path)
     if slug:
-        candidates += [f"skills/{slug}/SKILL.md", f"{slug}/SKILL.md"]
-    candidates += ["SKILL.md"]
+        candidates += [
+            f"skills/{slug}/SKILL.md",
+            f"skill/{slug}/SKILL.md",
+            f"{slug}/SKILL.md",
+        ]
+    candidates += ["SKILL.md", "skill/SKILL.md"]
     if slug and slug != repo:
         candidates += [f".cursor/skills/{slug}/SKILL.md"]
 
@@ -231,4 +283,4 @@ async def trigger_reindex(skills_service_url: str) -> None:
         async with httpx.AsyncClient(timeout=10) as client:
             await client.post(f"{skills_service_url.rstrip('/')}/reload")
     except httpx.RequestError:
-        pass  # non-fatal
+        pass

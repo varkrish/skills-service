@@ -83,6 +83,7 @@ class InstallRequest(BaseModel):
     owner: str
     repo: str
     slug: str
+    github_path: str = ""  # exact path from agentskill.sh (e.g. "skill.md")
 
 
 class SkillEntry(BaseModel):
@@ -127,23 +128,28 @@ async def health():
 # ---------------------------------------------------------------------------
 
 
-@app.get("/api/marketplace/browse")
-async def browse_marketplace():
-    try:
-        skills = await mkt.browse_all_marketplace()
-        return {"results": skills, "count": len(skills)}
-    except httpx.HTTPError as exc:
-        raise HTTPException(status_code=502, detail=f"Marketplace unreachable: {exc}")
-
-
 @app.get("/api/marketplace/search")
-async def search_marketplace(q: str, limit: int = 10):
-    q = q.strip()
-    if len(q) < 2:
-        raise HTTPException(status_code=400, detail="Query must be at least 2 characters")
+async def search_marketplace(
+    q: str = "",
+    page: int = 1,
+    limit: int = 20,
+    sort: str = "",
+    category: str = "",
+):
+    """
+    Search / browse the agentskill.sh marketplace.
+
+    Supports:
+      - q: search query (empty = browse all)
+      - page: page number (1-indexed)
+      - limit: results per page (max 100)
+      - sort: trending, top, hot, latest
+      - category: development, marketing, etc.
+    """
     try:
-        results = await mkt.search_marketplace(q, min(limit, 10))
-        return {"results": results, "query": q, "count": len(results)}
+        return await mkt.search_marketplace(
+            q=q.strip(), page=max(page, 1), limit=limit, sort=sort, category=category,
+        )
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=502, detail=f"Marketplace unreachable: {exc}")
 
@@ -162,12 +168,13 @@ async def install_skill(req: InstallRequest, background_tasks: BackgroundTasks):
         owner, repo = req.owner.strip(), req.repo.strip()
 
     slug = req.slug.strip().lower().replace(" ", "-") or f"{owner}-{repo}".lower()
+    github_path = req.github_path.strip()
     job  = _new_job(total=1)
 
     async def _do():
         job.state = "running"
         try:
-            content = await mkt.fetch_skill_md(owner, repo, slug)
+            content = await mkt.fetch_skill_md(owner, repo, slug, github_path=github_path)
             skill_dir = MARKETPLACE_DIR / slug
             skill_dir.mkdir(parents=True, exist_ok=True)
             (skill_dir / "SKILL.md").write_text(content, encoding="utf-8")

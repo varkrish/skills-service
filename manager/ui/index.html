@@ -25,7 +25,7 @@
     .page-header h1 { font-family: var(--pf-global--FontFamily--heading); font-size: 1.25rem; font-weight: 700; margin: 0; color: #fff; }
     .page-header .subtitle { font-size: 0.75rem; color: #aaa; }
 
-    .main { max-width: 1100px; margin: 2rem auto; padding: 0 1.5rem; }
+    .main { max-width: 1200px; margin: 2rem auto; padding: 0 1.5rem; }
 
     .tabs { display: flex; gap: 0; border-bottom: 2px solid #d2d2d2; margin-bottom: 1.5rem; }
     .tab-btn {
@@ -40,13 +40,21 @@
     .tab-panel { display: none; }
     .tab-panel.active { display: block; }
 
-    /* Search bar */
-    .search-row { display: flex; gap: 0.5rem; margin-bottom: 1.25rem; }
+    /* Search + filter bar */
+    .search-row { display: flex; gap: 0.5rem; margin-bottom: 0.75rem; flex-wrap: wrap; }
     .search-row input {
-      flex: 1; padding: 0.55rem 0.8rem; border: 1px solid #d2d2d2;
+      flex: 1; min-width: 200px; padding: 0.55rem 0.8rem; border: 1px solid #d2d2d2;
       border-radius: 4px; font-size: 0.9rem; outline: none;
     }
     .search-row input:focus { border-color: #0066cc; box-shadow: 0 0 0 2px #0066cc33; }
+
+    .filter-row { display: flex; gap: 0.5rem; margin-bottom: 1rem; flex-wrap: wrap; align-items: center; }
+    .filter-row select {
+      padding: 0.4rem 0.6rem; border: 1px solid #d2d2d2; border-radius: 4px;
+      font-size: 0.8rem; background: #fff; outline: none;
+    }
+    .filter-row select:focus { border-color: #0066cc; }
+    .filter-row .filter-label { font-size: 0.75rem; color: #6a6e73; font-weight: 600; }
 
     .btn {
       padding: 0.5rem 1.1rem; border: none; border-radius: 4px;
@@ -65,15 +73,27 @@
     .btn-success:disabled { background: #8ec98e; cursor: not-allowed; }
 
     /* Cards */
-    .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem; }
+    .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1rem; }
     .card {
       background: #fff; border: 1px solid #d2d2d2; border-radius: 8px;
-      padding: 1rem; display: flex; flex-direction: column; gap: 0.5rem;
+      padding: 1rem; display: flex; flex-direction: column; gap: 0.4rem;
     }
-    .card-name { font-weight: 600; font-size: 0.9rem; color: #151515; }
+    .card-header { display: flex; align-items: center; gap: 0.5rem; }
+    .card-avatar { width: 24px; height: 24px; border-radius: 4px; }
+    .card-name { font-weight: 600; font-size: 0.9rem; color: #151515; flex: 1; }
     .card-meta { font-size: 0.73rem; color: #6a6e73; font-family: monospace; }
     .card-desc { font-size: 0.8rem; color: #444; flex: 1; line-height: 1.4; }
-    .card-actions { display: flex; justify-content: flex-end; }
+    .card-badges { display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center; }
+    .badge {
+      font-size: 0.65rem; font-weight: 600; padding: 0.1rem 0.4rem;
+      border-radius: 8px; display: inline-flex; align-items: center; gap: 2px;
+    }
+    .badge-quality { background: #e7f1fa; color: #0066cc; }
+    .badge-security { background: #f0fdf4; color: #166534; }
+    .badge-installs { background: #fef9c3; color: #854d0e; }
+    .badge-category { background: #f3e8ff; color: #6b21a8; }
+    .badge-platform { background: #f0f0f0; color: #555; }
+    .card-actions { display: flex; justify-content: flex-end; gap: 0.4rem; margin-top: 0.25rem; }
 
     /* Section header */
     .section-title {
@@ -85,6 +105,19 @@
       background: #e7f1fa; color: #0066cc; font-size: 0.72rem;
       font-weight: 600; padding: 0.1rem 0.5rem; border-radius: 10px;
     }
+
+    /* Pagination */
+    .pagination {
+      display: flex; justify-content: center; align-items: center;
+      gap: 0.5rem; margin-top: 1.5rem; padding: 0.75rem 0;
+    }
+    .pagination button {
+      padding: 0.4rem 0.8rem; border: 1px solid #d2d2d2; border-radius: 4px;
+      background: #fff; cursor: pointer; font-size: 0.8rem;
+    }
+    .pagination button:hover { background: #f5f5f5; }
+    .pagination button:disabled { opacity: 0.4; cursor: not-allowed; }
+    .pagination .page-info { font-size: 0.8rem; color: #6a6e73; }
 
     /* Direct install box */
     .direct-install-box {
@@ -136,7 +169,7 @@
   </svg>
   <div>
     <h1>Skill Manager</h1>
-    <div class="subtitle">Browse, install, and manage AI agent skills</div>
+    <div class="subtitle">Browse 107,000+ AI agent skills from agentskill.sh</div>
   </div>
 </header>
 
@@ -149,32 +182,71 @@
     <button class="tab-btn" onclick="switchTab('github', event)">Install from GitHub</button>
   </div>
 
-  <!-- ── Marketplace tab ──────────────────────────────────────────────── -->
+  <!-- Marketplace tab -->
   <div id="tab-marketplace" class="tab-panel active">
     <div class="search-row">
       <input id="mkt-query" type="text"
-             placeholder='Search — e.g. "mcp", "code", "acceptance", "spreadsheet"'
-             onkeydown="if(event.key==='Enter') searchMarketplace()" />
-      <button class="btn btn-primary" id="mkt-btn" onclick="searchMarketplace()">Search</button>
-      <button class="btn btn-secondary" onclick="loadFeatured()">Browse all</button>
+             placeholder="Search 107,000+ skills — e.g. kubernetes, react, devops, testing…"
+             onkeydown="if(event.key==='Enter') doSearch()" />
+      <button class="btn btn-primary" id="mkt-btn" onclick="doSearch()">Search</button>
     </div>
+
+    <div class="filter-row">
+      <span class="filter-label">Sort:</span>
+      <select id="mkt-sort" onchange="doSearch()">
+        <option value="">Default</option>
+        <option value="trending">Trending</option>
+        <option value="top">Top</option>
+        <option value="hot">Hot</option>
+        <option value="latest">Latest</option>
+      </select>
+
+      <span class="filter-label" style="margin-left:0.5rem">Category:</span>
+      <select id="mkt-category" onchange="doSearch()">
+        <option value="">All categories</option>
+        <option value="development">Development & Engineering</option>
+        <option value="product-management">Product Management</option>
+        <option value="data-analytics">Data & Analytics</option>
+        <option value="marketing">Marketing</option>
+        <option value="operations">Operations</option>
+        <option value="sales">Sales</option>
+        <option value="design">Design</option>
+        <option value="project-management">Project Management</option>
+        <option value="education">Education & Research</option>
+        <option value="customer-support">Customer Support</option>
+        <option value="content-media">Content & Media</option>
+        <option value="finance">Finance & Accounting</option>
+        <option value="healthcare">Healthcare</option>
+        <option value="legal">Legal</option>
+        <option value="hr">Human Resources</option>
+      </select>
+
+      <span class="filter-label" style="margin-left:0.5rem">Per page:</span>
+      <select id="mkt-limit" onchange="doSearch()">
+        <option value="20">20</option>
+        <option value="50">50</option>
+        <option value="100">100</option>
+      </select>
+    </div>
+
     <div id="mkt-section-title" class="section-title" style="display:none">
-      <span id="mkt-section-label">Featured skills</span>
+      <span id="mkt-section-label">Skills</span>
       <span id="mkt-count-badge" class="count-badge"></span>
     </div>
     <div id="mkt-results">
-      <div class="empty"><span class="spinner"></span> Loading available skills…</div>
+      <div class="empty"><span class="spinner"></span> Loading skills…</div>
     </div>
+    <div id="mkt-pagination"></div>
   </div>
 
-  <!-- ── Installed tab ────────────────────────────────────────────────── -->
+  <!-- Installed tab -->
   <div id="tab-installed" class="tab-panel">
     <div id="installed-list">
       <div class="empty"><span class="spinner"></span> Loading…</div>
     </div>
   </div>
 
-  <!-- ── GitHub install tab ────────────────────────────────────────────── -->
+  <!-- GitHub install tab -->
   <div id="tab-github" class="tab-panel">
     <div class="direct-install-box">
       <div class="label">Install skills from any GitHub repository</div>
@@ -205,6 +277,7 @@
 <script>
 // ── State ─────────────────────────────────────────────────────────────────
 const installing = new Set();
+let currentPage = 1;
 
 // ── Tab switching ─────────────────────────────────────────────────────────
 function switchTab(tab, evt) {
@@ -224,46 +297,39 @@ function toast(msg, type = 'success') {
   setTimeout(() => el.remove(), 4000);
 }
 
-// ── Marketplace search ────────────────────────────────────────────────────
-async function loadFeatured() {
-  document.getElementById('mkt-query').value = '';
-  const btn = document.getElementById('mkt-btn');
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span>';
-  document.getElementById('mkt-results').innerHTML =
-    '<div class="empty"><span class="spinner"></span> Loading all marketplace skills…</div>';
-  document.getElementById('mkt-section-title').style.display = 'none';
-  try {
-    const res = await fetch('/api/marketplace/browse');
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || 'Failed to load');
-    renderResults(data.results || [], `All skills (${data.count})`);
-  } catch (e) {
-    document.getElementById('mkt-results').innerHTML =
-      `<div class="empty">Error: ${escHtml(e.message)}</div>`;
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'Search';
-  }
-}
+// ── Marketplace search with pagination ────────────────────────────────────
+async function doSearch(page) {
+  if (page !== undefined) currentPage = page;
+  else currentPage = 1;
 
-async function searchMarketplace() {
   const q = document.getElementById('mkt-query').value.trim();
-  if (!q) { loadFeatured(); return; }
-  if (q.length < 2) { toast('Enter at least 2 characters', 'error'); return; }
+  const sort = document.getElementById('mkt-sort').value;
+  const category = document.getElementById('mkt-category').value;
+  const limit = document.getElementById('mkt-limit').value;
 
   const btn = document.getElementById('mkt-btn');
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span>';
   document.getElementById('mkt-results').innerHTML =
-    '<div class="empty"><span class="spinner"></span> Searching…</div>';
+    '<div class="empty"><span class="spinner"></span> Loading skills…</div>';
+  document.getElementById('mkt-pagination').innerHTML = '';
   document.getElementById('mkt-section-title').style.display = 'none';
 
+  const params = new URLSearchParams({
+    page: currentPage, limit,
+    ...(q && { q }),
+    ...(sort && { sort }),
+    ...(category && { category }),
+  });
+
   try {
-    const res = await fetch(`/api/marketplace/search?q=${encodeURIComponent(q)}&limit=10`);
+    const res = await fetch(`/api/marketplace/search?${params}`);
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || 'Search failed');
-    renderResults(data.results || [], `Results for "${q}"`);
+
+    const label = q ? `Results for "${q}"` : 'All skills';
+    renderResults(data.results || [], label, data.total || 0);
+    renderPagination(data);
   } catch (e) {
     document.getElementById('mkt-results').innerHTML =
       `<div class="empty">Error: ${escHtml(e.message)}</div>`;
@@ -273,7 +339,7 @@ async function searchMarketplace() {
   }
 }
 
-function renderResults(results, label) {
+function renderResults(results, label, total) {
   const titleEl = document.getElementById('mkt-section-title');
   const labelEl = document.getElementById('mkt-section-label');
   const badgeEl = document.getElementById('mkt-count-badge');
@@ -281,7 +347,7 @@ function renderResults(results, label) {
   if (results.length) {
     titleEl.style.display = 'flex';
     labelEl.textContent = label;
-    badgeEl.textContent = results.length;
+    badgeEl.textContent = total > 0 ? total.toLocaleString() + ' total' : results.length;
   } else {
     titleEl.style.display = 'none';
   }
@@ -292,8 +358,7 @@ function renderResults(results, label) {
       <div class="empty">
         No skills found for this search.<br>
         <span style="font-size:0.8rem;margin-top:0.5rem;display:block">
-          <button class="btn btn-secondary" style="padding:0.2rem 0.6rem;font-size:0.8rem"
-            onclick="loadFeatured()">Browse all skills</button>
+          Try a different query or clear filters.
         </span>
       </div>`;
     return;
@@ -301,21 +366,49 @@ function renderResults(results, label) {
 
   el.innerHTML = `<div class="card-grid">${results.map(r => {
     const slug = r.slug || `${r.owner}-${r.repo}`.toLowerCase();
-    const id = `install-${CSS.escape(slug)}`;
     return `
       <div class="card">
-        <div class="card-name">${escHtml(r.name || slug)}</div>
+        <div class="card-header">
+          ${r.avatarUrl ? `<img class="card-avatar" src="${escAttr(r.avatarUrl)}" alt="" />` : ''}
+          <div class="card-name">${escHtml(r.name || slug)}</div>
+        </div>
         <div class="card-meta">${escHtml(r.sourceIdentifier || `${r.owner}/${r.repo}`)}</div>
         <div class="card-desc">${escHtml(truncate(r.description || 'No description.', 160))}</div>
+        <div class="card-badges">
+          ${r.contentQualityScore ? `<span class="badge badge-quality">Quality ${r.contentQualityScore}</span>` : ''}
+          ${r.securityScore ? `<span class="badge badge-security">Security ${r.securityScore}</span>` : ''}
+          ${r.installCount ? `<span class="badge badge-installs">${r.installCount} installs</span>` : ''}
+          ${r.category ? `<span class="badge badge-category">${escHtml(r.category)}</span>` : ''}
+        </div>
         <div class="card-actions">
-          <button id="${id}" class="btn btn-success"
+          <a class="btn btn-secondary" href="${escAttr(r.marketplaceUrl || `https://agentskill.sh/@${r.owner}/${r.slug}`)}"
+             target="_blank" style="font-size:0.8rem;padding:0.3rem 0.7rem;text-decoration:none">View</a>
+          <button class="btn btn-success"
             data-owner="${escAttr(r.owner)}"
             data-repo="${escAttr(r.repo)}"
             data-slug="${escAttr(slug)}"
+            data-github-path="${escAttr(r.githubPath || '')}"
             onclick="installFromCard(this)">Install</button>
         </div>
       </div>`;
   }).join('')}</div>`;
+}
+
+function renderPagination(data) {
+  const el = document.getElementById('mkt-pagination');
+  if (!data.totalPages || data.totalPages <= 1) { el.innerHTML = ''; return; }
+
+  const page = data.page || currentPage;
+  const totalPages = data.totalPages;
+  const total = data.total || 0;
+
+  el.innerHTML = `
+    <div class="pagination">
+      <button ${page <= 1 ? 'disabled' : ''} onclick="doSearch(1)">« First</button>
+      <button ${page <= 1 ? 'disabled' : ''} onclick="doSearch(${page - 1})">‹ Prev</button>
+      <span class="page-info">Page ${page} of ${totalPages.toLocaleString()} (${total.toLocaleString()} skills)</span>
+      <button ${!data.hasMore ? 'disabled' : ''} onclick="doSearch(${page + 1})">Next ›</button>
+    </div>`;
 }
 
 // ── GitHub repo scan + bulk install ───────────────────────────────────────
@@ -418,7 +511,7 @@ async function pollJob(jobId, { onProgress, onDone, onError, intervalMs = 800 } 
 
 // ── Single skill install (via marketplace card) ────────────────────────────
 async function installFromCard(btn) {
-  const { owner, repo, slug } = btn.dataset;
+  const { owner, repo, slug, githubPath } = btn.dataset;
   if (installing.has(slug)) return;
   installing.add(slug);
   btn.disabled = true;
@@ -428,7 +521,7 @@ async function installFromCard(btn) {
     const res = await fetch('/api/marketplace/install', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ owner, repo, slug }),
+      body: JSON.stringify({ owner, repo, slug, github_path: githubPath || '' }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || 'Install failed');
@@ -644,7 +737,7 @@ function truncate(s, n) { return s.length > n ? s.slice(0, n) + '…' : s; }
 
 // ── Init ──────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
-  loadFeatured();
+  doSearch(1);
   updateInstalledBadge();
 });
 </script>
