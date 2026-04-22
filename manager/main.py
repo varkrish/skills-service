@@ -101,7 +101,7 @@ async def install_skill(req: InstallRequest, background_tasks: BackgroundTasks):
     skill_dir = MARKETPLACE_DIR / slug
 
     try:
-        content = await mkt.fetch_skill_md(req.owner, req.repo)
+        content = await mkt.fetch_skill_md(req.owner, req.repo, slug)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
     except httpx.HTTPError as exc:

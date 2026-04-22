@@ -106,16 +106,35 @@ async def browse_all_marketplace() -> list[dict]:
     return result
 
 
-async def fetch_skill_md(owner: str, repo: str) -> str:
-    """Fetch SKILL.md from GitHub. Tries main then master."""
+async def fetch_skill_md(owner: str, repo: str, slug: str = "") -> str:
+    """
+    Fetch SKILL.md from GitHub for a given owner/repo.
+
+    Tries multiple candidate paths because the marketplace uses two layouts:
+      1. Monorepo: skills/<slug>/SKILL.md  (e.g. anthropics/skills, agilebydesign/agilebydesign-skills)
+      2. Single-skill repo: SKILL.md at root
+      3. Repo name as subdirectory: <repo>/SKILL.md
+
+    Both main and master branches are tried for each path.
+    """
+    candidates = []
+    if slug:
+        candidates += [f"skills/{slug}/SKILL.md", f"{slug}/SKILL.md"]
+    candidates += ["SKILL.md"]
+    if slug and slug != repo:
+        candidates += [f".cursor/skills/{slug}/SKILL.md"]
+
     async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
         for branch in ("main", "master"):
-            r = await client.get(
-                f"https://raw.githubusercontent.com/{owner}/{repo}/{branch}/SKILL.md"
-            )
-            if r.status_code == 200:
-                return r.text
-    raise ValueError(f"SKILL.md not found for {owner}/{repo} (tried main, master)")
+            for path in candidates:
+                url = f"https://raw.githubusercontent.com/{owner}/{repo}/{branch}/{path}"
+                r = await client.get(url)
+                if r.status_code == 200:
+                    logger.debug("Found SKILL.md at %s", url)
+                    return r.text
+
+    tried = ", ".join(candidates)
+    raise ValueError(f"SKILL.md not found for {owner}/{repo} slug={slug!r} (tried: {tried})")
 
 
 async def trigger_reindex(skills_service_url: str) -> None:
