@@ -1,10 +1,9 @@
 """
 Skill Manager — management API + embedded UI for the OPL skills ecosystem.
 
-All write operations are async:
-  - POST endpoints return 202 + job_id immediately
-  - GET /api/jobs/{job_id} lets callers poll for progress
-  - Downloads run concurrently via asyncio.gather
+All write operations are async (202 + job_id). Poll GET /api/jobs/{job_id}.
+Bulk installs run concurrently; raw_url from the scan result is used directly
+so no second GitHub scan is needed (avoids rate-limit exhaustion).
 """
 import asyncio
 import logging
@@ -35,10 +34,11 @@ MARKETPLACE_DIR    = Path(os.environ.get("SKILLS_MARKETPLACE_DIR", "/app/skills/
 MARKETPLACE_DIR.mkdir(parents=True, exist_ok=True)
 
 # ---------------------------------------------------------------------------
-# In-memory job store  {job_id: JobStatus}
+# In-memory job store
 # ---------------------------------------------------------------------------
 
 JobState = Literal["pending", "running", "done", "failed"]
+
 
 class JobStatus(BaseModel):
     id: str
@@ -47,6 +47,7 @@ class JobStatus(BaseModel):
     installed: list[str] = []
     failed: list[dict] = []
     message: str = ""
+
 
 _jobs: dict[str, JobStatus] = {}
 
@@ -62,6 +63,7 @@ def _new_job(total: int = 0) -> JobStatus:
 
 _GH_RE = re.compile(r"github\.com/([^/]+)/([^/?\s#]+)")
 
+
 def _parse_gh_url(raw: str) -> tuple[str, str]:
     raw = raw.strip().rstrip("/").replace(".git", "")
     m = _GH_RE.search(raw)
@@ -76,15 +78,22 @@ def _parse_gh_url(raw: str) -> tuple[str, str]:
 # Models
 # ---------------------------------------------------------------------------
 
+
 class InstallRequest(BaseModel):
     owner: str
     repo: str
     slug: str
 
+
+class SkillEntry(BaseModel):
+    slug: str
+    raw_url: str = ""   # download_url from scan — used directly if provided
+
+
 class BulkInstallRequest(BaseModel):
     owner: str
     repo: str
-    slugs: list[str]
+    skills: list[SkillEntry]   # slug + raw_url per skill
 
 # ---------------------------------------------------------------------------
 # App
@@ -93,8 +102,9 @@ class BulkInstallRequest(BaseModel):
 app = FastAPI(title="Skill Manager", version="0.2.0")
 
 # ---------------------------------------------------------------------------
-# Job store endpoint
+# Jobs
 # ---------------------------------------------------------------------------
+
 
 @app.get("/api/jobs/{job_id}")
 async def get_job(job_id: str):
@@ -107,17 +117,18 @@ async def get_job(job_id: str):
 # Health
 # ---------------------------------------------------------------------------
 
+
 @app.get("/api/health")
 async def health():
     return {"status": "ok", "service": "skill-manager", "version": "0.2.0"}
 
 # ---------------------------------------------------------------------------
-# Marketplace — read (browse / search)
+# Marketplace — browse / search
 # ---------------------------------------------------------------------------
+
 
 @app.get("/api/marketplace/browse")
 async def browse_marketplace():
-    """All discoverable marketplace skills (fan-out + cache)."""
     try:
         skills = await mkt.browse_all_marketplace()
         return {"results": skills, "count": len(skills)}
@@ -127,7 +138,6 @@ async def browse_marketplace():
 
 @app.get("/api/marketplace/search")
 async def search_marketplace(q: str, limit: int = 10):
-    """Search agentskill.sh (min 2 chars)."""
     q = q.strip()
     if len(q) < 2:
         raise HTTPException(status_code=400, detail="Query must be at least 2 characters")
@@ -138,17 +148,15 @@ async def search_marketplace(q: str, limit: int = 10):
         raise HTTPException(status_code=502, detail=f"Marketplace unreachable: {exc}")
 
 # ---------------------------------------------------------------------------
-# Marketplace — write (install single)
+# Marketplace — single install
 # ---------------------------------------------------------------------------
+
 
 @app.post("/api/marketplace/install", status_code=202)
 async def install_skill(req: InstallRequest, background_tasks: BackgroundTasks):
-    """
-    Async single-skill install. Returns job_id immediately; downloads
-    SKILL.md in the background and triggers skills-service reindex.
-    """
+    """Async single-skill install. Returns job_id immediately."""
     try:
-        owner, repo = _parse_gh_url(req.owner) if "/" in req.owner or "github" in req.owner \
+        owner, repo = _parse_gh_url(req.owner) if ("/" in req.owner or "github" in req.owner) \
                       else (req.owner.strip(), req.repo.strip())
     except ValueError:
         owner, repo = req.owner.strip(), req.repo.strip()
@@ -156,7 +164,7 @@ async def install_skill(req: InstallRequest, background_tasks: BackgroundTasks):
     slug = req.slug.strip().lower().replace(" ", "-") or f"{owner}-{repo}".lower()
     job  = _new_job(total=1)
 
-    async def _do_install():
+    async def _do():
         job.state = "running"
         try:
             content = await mkt.fetch_skill_md(owner, repo, slug)
@@ -172,19 +180,16 @@ async def install_skill(req: InstallRequest, background_tasks: BackgroundTasks):
         finally:
             job.state = "done"
 
-    background_tasks.add_task(_do_install)
+    background_tasks.add_task(_do)
     return {"job_id": job.id, "slug": slug, "status": "accepted"}
 
 # ---------------------------------------------------------------------------
 # GitHub repo scan
 # ---------------------------------------------------------------------------
 
+
 @app.get("/api/github/scan")
 async def scan_github_repo(repo_url: str):
-    """
-    Scan a GitHub repo for all SKILL.md files.
-    Supports full GitHub URLs and owner/repo shorthand.
-    """
     try:
         owner, repo = _parse_gh_url(repo_url)
     except ValueError as exc:
@@ -202,68 +207,54 @@ async def scan_github_repo(repo_url: str):
     return {"owner": owner, "repo": repo, "skills": skills, "count": len(skills)}
 
 # ---------------------------------------------------------------------------
-# GitHub bulk install — fully async, concurrent downloads
+# GitHub bulk install — concurrent, no re-scan
 # ---------------------------------------------------------------------------
+
 
 @app.post("/api/github/install-bulk", status_code=202)
 async def install_bulk(req: BulkInstallRequest, background_tasks: BackgroundTasks):
     """
-    Kick off concurrent background installation of multiple skills.
-    Returns job_id immediately; poll GET /api/jobs/{job_id} for progress.
+    Concurrently install multiple skills. raw_url is used directly when
+    provided (from the scan result), so no second GitHub API scan is needed.
+    Returns job_id; poll GET /api/jobs/{job_id}.
     """
-    job = _new_job(total=len(req.slugs))
+    job = _new_job(total=len(req.skills))
+
+    async def _install_one(entry: SkillEntry):
+        skill_dir = MARKETPLACE_DIR / entry.slug
+        try:
+            if entry.raw_url:
+                async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+                    r = await client.get(entry.raw_url)
+                    r.raise_for_status()
+                    content = r.text
+            else:
+                content = await mkt.fetch_skill_md(req.owner, req.repo, entry.slug)
+
+            skill_dir.mkdir(parents=True, exist_ok=True)
+            (skill_dir / "SKILL.md").write_text(content, encoding="utf-8")
+            job.installed.append(entry.slug)
+            logger.info("Bulk installed: %s", entry.slug)
+        except Exception as exc:
+            job.failed.append({"slug": entry.slug, "reason": str(exc)})
+            logger.warning("Failed to install %s: %s", entry.slug, exc)
 
     async def _do_bulk():
         job.state = "running"
-        # Scan once to get raw_urls for all skills
-        try:
-            all_skills = await mkt.scan_github_repo(req.owner, req.repo)
-        except Exception as exc:
-            job.state = "failed"
-            job.message = f"Scan failed: {exc}"
-            return
-
-        by_slug = {s["slug"]: s for s in all_skills}
-
-        async def _install_one(slug: str):
-            skill = by_slug.get(slug)
-            if not skill:
-                job.failed.append({"slug": slug, "reason": "not found in scan"})
-                return
-            skill_dir = MARKETPLACE_DIR / slug
-            try:
-                if skill.get("raw_url"):
-                    async with httpx.AsyncClient(timeout=15) as client:
-                        r = await client.get(skill["raw_url"])
-                        r.raise_for_status()
-                        content = r.text
-                else:
-                    content = await mkt.fetch_skill_md(req.owner, req.repo, slug)
-
-                skill_dir.mkdir(parents=True, exist_ok=True)
-                (skill_dir / "SKILL.md").write_text(content, encoding="utf-8")
-                job.installed.append(slug)
-                logger.info("Bulk installed: %s", slug)
-            except Exception as exc:
-                job.failed.append({"slug": slug, "reason": str(exc)})
-                logger.warning("Failed to install %s: %s", slug, exc)
-
-        # Download all skills concurrently
-        await asyncio.gather(*[_install_one(s) for s in req.slugs])
-
+        await asyncio.gather(*[_install_one(e) for e in req.skills])
         if job.installed:
             await mkt.trigger_reindex(SKILLS_SERVICE_URL)
-
         job.state = "done"
         job.message = f"Installed {len(job.installed)}/{job.total}, failed {len(job.failed)}"
-        logger.info("Bulk install job %s done: %s", job.id, job.message)
+        logger.info("Bulk job %s: %s", job.id, job.message)
 
     background_tasks.add_task(_do_bulk)
-    return {"job_id": job.id, "total": len(req.slugs), "status": "accepted"}
+    return {"job_id": job.id, "total": len(req.skills), "status": "accepted"}
 
 # ---------------------------------------------------------------------------
-# Installed skills — list / delete
+# Installed skills
 # ---------------------------------------------------------------------------
+
 
 def _read_frontmatter(path: Path) -> tuple[str, str]:
     content = path.read_text(encoding="utf-8")
@@ -304,19 +295,18 @@ async def delete_skill(slug: str, background_tasks: BackgroundTasks):
     skill_dir = MARKETPLACE_DIR / slug
     if not skill_dir.exists():
         raise HTTPException(status_code=404, detail=f"Skill '{slug}' not found")
-    skill_md = skill_dir / "SKILL.md"
-    if skill_md.exists():
-        skill_md.unlink()
+    (skill_dir / "SKILL.md").unlink(missing_ok=True)
     try:
         skill_dir.rmdir()
     except OSError:
         pass
-    logger.info("Deleted marketplace skill: %s", slug)
+    logger.info("Deleted skill: %s", slug)
     background_tasks.add_task(mkt.trigger_reindex, SKILLS_SERVICE_URL)
 
 # ---------------------------------------------------------------------------
-# Serve embedded UI
+# UI
 # ---------------------------------------------------------------------------
+
 
 @app.get("/", response_class=HTMLResponse)
 async def serve_ui():
