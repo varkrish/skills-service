@@ -208,7 +208,7 @@ async function searchMarketplace() {
   document.getElementById('mkt-results').innerHTML = '<div class="empty"><span class="spinner"></span> Searching agentskill.sh…</div>';
 
   try {
-    const res = await fetch(`/api/marketplace/search?q=${encodeURIComponent(q)}&limit=12`);
+    const res = await fetch(`/api/marketplace/search?q=${encodeURIComponent(q)}&limit=10`);
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || 'Search failed');
     renderResults(data.results || []);
@@ -228,21 +228,17 @@ function renderResults(results) {
     return;
   }
   el.innerHTML = `<div class="card-grid">${results.map(r => {
-    const owner = r.owner || (r.qualifiedName || '').split('/')[0] || '';
-    const repo  = r.repo  || (r.qualifiedName || '').split('/')[1] || '';
-    const slug  = `${owner}-${repo}`.replace(/[^a-z0-9-]/gi, '-').toLowerCase();
-    const qScore = r.qualityScore ?? r.quality_score ?? null;
-    const sScore = r.securityScore ?? r.security_score ?? null;
+    const owner = r.owner || '';
+    const repo  = r.repo  || '';
+    const slug  = r.slug  || `${owner}-${repo}`.replace(/[^a-z0-9-]/gi, '-').toLowerCase();
+    const installs = r.totalInstalls != null ? `<span class="score-badge score-high">${r.totalInstalls} installs</span>` : '';
     const id = `install-${slug}`;
     return `
       <div class="card">
-        <div class="card-name">${escHtml(r.displayName || r.name || slug)}</div>
-        <div class="card-meta">${escHtml(owner)}/${escHtml(repo)}</div>
+        <div class="card-name">${escHtml(r.name || slug)}</div>
+        <div class="card-meta">${escHtml(r.sourceIdentifier || `${owner}/${repo}`)}</div>
         <div class="card-desc">${escHtml(r.description || 'No description.')}</div>
-        <div class="card-scores">
-          ${scoreBadge('Q', qScore)}
-          ${scoreBadge('S', sScore)}
-        </div>
+        <div class="card-scores">${installs}</div>
         <div class="card-actions">
           <button id="${id}" class="btn btn-success"
             onclick="installSkill('${escAttr(owner)}','${escAttr(repo)}','${escAttr(slug)}','${id}')">
