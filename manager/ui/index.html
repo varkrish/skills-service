@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Skill Manager — OPL Crew</title>
+  <link rel="stylesheet"
+        href="https://unpkg.com/@patternfly/patternfly@5.3.1/patternfly.min.css"
+        crossorigin="anonymous" />
+  <style>
+    :root {
+      --pf-global--FontFamily--heading: "Red Hat Display", "Helvetica Neue", sans-serif;
+      --pf-global--FontFamily--text: "Red Hat Text", "Helvetica Neue", sans-serif;
+    }
+
+    body { background: #f0f0f0; font-family: var(--pf-global--FontFamily--text); }
+
+    .page-header {
+      background: #fff;
+      border-bottom: 1px solid #d2d2d2;
+      padding: 1rem 2rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+    .page-header h1 {
+      font-family: var(--pf-global--FontFamily--heading);
+      font-size: 1.4rem;
+      font-weight: 700;
+      margin: 0;
+      color: #151515;
+    }
+    .page-header .subtitle { font-size: 0.8rem; color: #6a6e73; }
+
+    .main { max-width: 1100px; margin: 2rem auto; padding: 0 1.5rem; }
+
+    .tabs { display: flex; gap: 0; border-bottom: 2px solid #d2d2d2; margin-bottom: 1.5rem; }
+    .tab-btn {
+      background: none; border: none; padding: 0.6rem 1.2rem;
+      font-size: 0.875rem; font-weight: 500; cursor: pointer;
+      border-bottom: 3px solid transparent; margin-bottom: -2px; color: #6a6e73;
+      transition: all 0.15s;
+    }
+    .tab-btn.active { color: #0066cc; border-bottom-color: #0066cc; }
+    .tab-btn:hover:not(.active) { color: #333; }
+
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* Search bar */
+    .search-row { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; }
+    .search-row input {
+      flex: 1; padding: 0.5rem 0.75rem; border: 1px solid #d2d2d2;
+      border-radius: 4px; font-size: 0.9rem; outline: none;
+    }
+    .search-row input:focus { border-color: #0066cc; box-shadow: 0 0 0 2px #0066cc33; }
+    .btn {
+      padding: 0.5rem 1.1rem; border: none; border-radius: 4px;
+      font-size: 0.875rem; font-weight: 500; cursor: pointer;
+      transition: background 0.15s;
+    }
+    .btn-primary { background: #0066cc; color: #fff; }
+    .btn-primary:hover { background: #004c99; }
+    .btn-primary:disabled { background: #8bc1f7; cursor: not-allowed; }
+    .btn-danger { background: #c9190b; color: #fff; font-size: 0.8rem; padding: 0.3rem 0.7rem; }
+    .btn-danger:hover { background: #a30000; }
+    .btn-success { background: #3e8635; color: #fff; font-size: 0.8rem; padding: 0.3rem 0.7rem; }
+    .btn-success:hover { background: #2d6325; }
+    .btn-success:disabled { background: #8ec98e; cursor: not-allowed; }
+
+    /* Cards */
+    .card-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 1rem;
+    }
+    .card {
+      background: #fff; border: 1px solid #d2d2d2; border-radius: 8px;
+      padding: 1rem; display: flex; flex-direction: column; gap: 0.5rem;
+    }
+    .card-name { font-weight: 600; font-size: 0.9rem; color: #151515; }
+    .card-meta { font-size: 0.75rem; color: #6a6e73; font-family: monospace; }
+    .card-desc { font-size: 0.8rem; color: #333; flex: 1; }
+    .card-scores { display: flex; gap: 0.5rem; align-items: center; }
+    .score-badge {
+      font-size: 0.7rem; font-weight: 600; padding: 0.2rem 0.5rem;
+      border-radius: 4px; color: #fff;
+    }
+    .score-high { background: #3e8635; }
+    .score-mid  { background: #f0ab00; color: #151515; }
+    .score-low  { background: #c9190b; }
+    .card-actions { display: flex; justify-content: flex-end; }
+
+    /* Toast */
+    #toast-container {
+      position: fixed; bottom: 1.5rem; right: 1.5rem;
+      display: flex; flex-direction: column; gap: 0.5rem; z-index: 9999;
+    }
+    .toast {
+      padding: 0.75rem 1.2rem; border-radius: 6px; font-size: 0.85rem;
+      color: #fff; box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+      animation: slide-in 0.2s ease;
+    }
+    .toast-success { background: #3e8635; }
+    .toast-error   { background: #c9190b; }
+    @keyframes slide-in { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+    /* Empty / loading states */
+    .empty { text-align: center; padding: 3rem; color: #6a6e73; font-size: 0.9rem; }
+    .spinner {
+      display: inline-block; width: 18px; height: 18px;
+      border: 2px solid #ccc; border-top-color: #0066cc;
+      border-radius: 50%; animation: spin 0.7s linear infinite;
+      vertical-align: middle; margin-right: 6px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .installed-row {
+      display: flex; align-items: center; gap: 0.75rem;
+      background: #fff; border: 1px solid #d2d2d2; border-radius: 6px;
+      padding: 0.75rem 1rem; margin-bottom: 0.5rem;
+    }
+    .installed-row .name { font-weight: 600; font-size: 0.9rem; flex: 1; }
+    .installed-row .desc { font-size: 0.8rem; color: #6a6e73; }
+  </style>
+</head>
+<body>
+
+<header class="page-header">
+  <svg width="28" height="28" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect width="40" height="40" rx="8" fill="#0066CC"/>
+    <path d="M12 28 L20 12 L28 28" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    <path d="M15 22 H25" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+  </svg>
+  <div>
+    <h1>Skill Manager</h1>
+    <div class="subtitle">Browse, install, and manage AI agent skills</div>
+  </div>
+</header>
+
+<main class="main">
+
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('marketplace')">Marketplace</button>
+    <button class="tab-btn" onclick="switchTab('installed')">Installed</button>
+  </div>
+
+  <!-- ── Marketplace tab ──────────────────────────────────────────────── -->
+  <div id="tab-marketplace" class="tab-panel active">
+    <div class="search-row">
+      <input id="mkt-query" type="text"
+             placeholder='Search 107,000+ skills — e.g. "frappe", "kubernetes", "react testing"'
+             onkeydown="if(event.key==='Enter') searchMarketplace()" />
+      <button class="btn btn-primary" id="mkt-btn" onclick="searchMarketplace()">Search</button>
+    </div>
+    <div id="mkt-results">
+      <div class="empty">Search agentskill.sh to find skills for your agents.</div>
+    </div>
+  </div>
+
+  <!-- ── Installed tab ────────────────────────────────────────────────── -->
+  <div id="tab-installed" class="tab-panel">
+    <div id="installed-list">
+      <div class="empty"><span class="spinner"></span> Loading…</div>
+    </div>
+  </div>
+
+</main>
+
+<div id="toast-container"></div>
+
+<script>
+// ── Tab switching ─────────────────────────────────────────────────────────
+function switchTab(tab) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + tab).classList.add('active');
+  event.target.classList.add('active');
+  if (tab === 'installed') loadInstalled();
+}
+
+// ── Toast ─────────────────────────────────────────────────────────────────
+function toast(msg, type = 'success') {
+  const el = document.createElement('div');
+  el.className = `toast toast-${type}`;
+  el.textContent = msg;
+  document.getElementById('toast-container').appendChild(el);
+  setTimeout(() => el.remove(), 4000);
+}
+
+// ── Score badge ───────────────────────────────────────────────────────────
+function scoreBadge(label, score) {
+  if (score == null) return '';
+  const cls = score >= 70 ? 'score-high' : score >= 40 ? 'score-mid' : 'score-low';
+  return `<span class="score-badge ${cls}">${label} ${score}</span>`;
+}
+
+// ── Marketplace search ────────────────────────────────────────────────────
+const installing = new Set();
+
+async function searchMarketplace() {
+  const q = document.getElementById('mkt-query').value.trim();
+  if (q.length < 2) { toast('Enter at least 2 characters', 'error'); return; }
+
+  const btn = document.getElementById('mkt-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Searching…';
+  document.getElementById('mkt-results').innerHTML = '<div class="empty"><span class="spinner"></span> Searching agentskill.sh…</div>';
+
+  try {
+    const res = await fetch(`/api/marketplace/search?q=${encodeURIComponent(q)}&limit=12`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Search failed');
+    renderResults(data.results || []);
+  } catch (e) {
+    document.getElementById('mkt-results').innerHTML =
+      `<div class="empty">Error: ${e.message}</div>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Search';
+  }
+}
+
+function renderResults(results) {
+  const el = document.getElementById('mkt-results');
+  if (!results.length) {
+    el.innerHTML = '<div class="empty">No skills found. Try different keywords.</div>';
+    return;
+  }
+  el.innerHTML = `<div class="card-grid">${results.map(r => {
+    const owner = r.owner || (r.qualifiedName || '').split('/')[0] || '';
+    const repo  = r.repo  || (r.qualifiedName || '').split('/')[1] || '';
+    const slug  = `${owner}-${repo}`.replace(/[^a-z0-9-]/gi, '-').toLowerCase();
+    const qScore = r.qualityScore ?? r.quality_score ?? null;
+    const sScore = r.securityScore ?? r.security_score ?? null;
+    const id = `install-${slug}`;
+    return `
+      <div class="card">
+        <div class="card-name">${escHtml(r.displayName || r.name || slug)}</div>
+        <div class="card-meta">${escHtml(owner)}/${escHtml(repo)}</div>
+        <div class="card-desc">${escHtml(r.description || 'No description.')}</div>
+        <div class="card-scores">
+          ${scoreBadge('Q', qScore)}
+          ${scoreBadge('S', sScore)}
+        </div>
+        <div class="card-actions">
+          <button id="${id}" class="btn btn-success"
+            onclick="installSkill('${escAttr(owner)}','${escAttr(repo)}','${escAttr(slug)}','${id}')">
+            Install
+          </button>
+        </div>
+      </div>`;
+  }).join('')}</div>`;
+}
+
+async function installSkill(owner, repo, slug, btnId) {
+  if (installing.has(slug)) return;
+  installing.add(slug);
+  const btn = document.getElementById(btnId);
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>';
+
+  try {
+    const res = await fetch('/api/marketplace/install', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ owner, repo, slug }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Install failed');
+    btn.textContent = 'Installed ✓';
+    toast(`Installed: ${slug}`);
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = 'Install';
+    toast(`Failed: ${e.message}`, 'error');
+  } finally {
+    installing.delete(slug);
+  }
+}
+
+// ── Installed skills ──────────────────────────────────────────────────────
+async function loadInstalled() {
+  document.getElementById('installed-list').innerHTML =
+    '<div class="empty"><span class="spinner"></span> Loading…</div>';
+  try {
+    const res = await fetch('/api/installed');
+    const data = await res.json();
+    renderInstalled(data.skills || []);
+  } catch (e) {
+    document.getElementById('installed-list').innerHTML =
+      `<div class="empty">Error: ${e.message}</div>`;
+  }
+}
+
+function renderInstalled(skills) {
+  const el = document.getElementById('installed-list');
+  if (!skills.length) {
+    el.innerHTML = '<div class="empty">No marketplace skills installed yet. Browse the Marketplace tab to install one.</div>';
+    return;
+  }
+  el.innerHTML = skills.map(s => `
+    <div class="installed-row" id="row-${escAttr(s.slug)}">
+      <div style="flex:1">
+        <div class="name">${escHtml(s.name)}</div>
+        <div class="desc">${escHtml(s.description || s.slug)}</div>
+      </div>
+      <button class="btn btn-danger"
+        onclick="deleteSkill('${escAttr(s.slug)}')">Remove</button>
+    </div>
+  `).join('');
+}
+
+async function deleteSkill(slug) {
+  if (!confirm(`Remove skill "${slug}"?`)) return;
+  try {
+    const res = await fetch(`/api/installed/${encodeURIComponent(slug)}`, { method: 'DELETE' });
+    if (!res.ok && res.status !== 204) throw new Error('Delete failed');
+    document.getElementById(`row-${slug}`)?.remove();
+    toast(`Removed: ${slug}`);
+    loadInstalled();
+  } catch (e) {
+    toast(`Failed: ${e.message}`, 'error');
+  }
+}
+
+// ── Utils ─────────────────────────────────────────────────────────────────
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function escAttr(s) {
+  return String(s).replace(/'/g,"\\'");
+}
+</script>
+</body>
+</html>

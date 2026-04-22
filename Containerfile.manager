@@ -1,0 +1,16 @@
+FROM registry.access.redhat.com/ubi9/python-311:latest
+
+USER root
+WORKDIR /app
+
+COPY manager/requirements.txt .
+RUN pip install --no-cache-dir -q -r requirements.txt
+
+# Python source + embedded UI
+COPY manager/main.py        main.py
+COPY manager/marketplace.py marketplace.py
+COPY manager/ui/            ui/
+
+EXPOSE 8091
+
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8091"]
