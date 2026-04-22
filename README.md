@@ -2,6 +2,8 @@
 
 Standalone FastAPI microservice that indexes [Cursor-style skill folders](https://docs.cursor.com/context/rules-for-ai) and provides semantic search over them. Framework-agnostic — works with any domain's skills (web frameworks, DevOps patterns, data pipelines, infrastructure, etc.). Used by AI agents in the [OPL Crew](https://github.com/varkrish/opl-ai-software-team) platform to discover coding conventions, architectural patterns, and best practices at query time.
 
+This repository is **read-only** for skill content: it indexes and queries `SKILL.md` files. To search marketplaces, install skills from GitHub, or delete installed skills, use the separate [**Skill Manager**](https://github.com/varkrish/skill-manager) service (port 8091), which writes into a shared marketplace directory and calls this service’s `/reload` endpoint after changes.
+
 ## Why Embeddings?
 
 AI agents need to find the right skill at the right time — but they don't know the exact skill name or filename upfront. A keyword search would fail when an agent asks "how do I containerize this app" but the relevant skill is named `containerfile-generator`. Embeddings solve this by converting both the query and skill content into vector representations that capture **meaning**, not just words.
@@ -45,26 +47,32 @@ podman run -p 8090:8090 -v ./skills:/app/skills:ro skills-service
 
 ### Run as part of OPL Crew (dev compose)
 
-This service is a **Git submodule** of [opl_ai_mono](https://github.com/varkrish/opl-crew-mono) at `skills-service/` (sibling to `opl-ai-software-team/`). Clone the mono repo with submodules:
+This service is a **Git submodule** of [opl_ai_mono](https://github.com/varkrish/opl-crew-mono) at `skills-service/`. The [Skill Manager](https://github.com/varkrish/skill-manager) is a sibling submodule at `skill-manager/` (writes marketplace skills; this service reads them).
+
+Clone the mono repo with submodules:
 
 ```bash
 git clone --recurse-submodules https://github.com/varkrish/opl-crew-mono.git opl_ai_mono
 # If you already cloned without submodules:
-cd opl_ai_mono && git submodule update --init skills-service
+cd opl_ai_mono && git submodule update --init skills-service skill-manager
 ```
 
-Dev compose under `opl-ai-software-team/` builds from `SKILLS_SERVICE_DIR` (default `../skills-service`). Optional override in the mono repo `.env`:
+From the **mono repo root**, `dev-compose.yml` mounts this repo’s `src/` for the skills container and mounts `skill-manager/` for the manager. Optional overrides in `.env`:
 
 ```bash
-SKILLS_SERVICE_DIR=../skills-service
+SKILLS_SERVICE_DIR=./skills-service
+SKILL_MANAGER_DIR=./skill-manager
+FRAPPE_SKILLS_DIR=/path/to/your/.cursor/skills   # framework skills (read-only mount)
 ```
 
 Then:
 
 ```bash
-cd opl_ai_mono/opl-ai-software-team
-podman compose -f compose.dev.yaml up skills-service
+cd opl_ai_mono
+podman compose -f dev-compose.yml up -d skills-service skill-manager
 ```
+
+For backend-only dev compose under `opl-ai-software-team/`, see that repo’s `compose.dev.yaml` (may differ from the mono `dev-compose.yml`).
 
 ## API
 
