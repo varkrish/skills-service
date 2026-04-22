@@ -13,30 +13,23 @@
       --pf-global--FontFamily--text: "Red Hat Text", "Helvetica Neue", sans-serif;
     }
 
-    body { background: #f0f0f0; font-family: var(--pf-global--FontFamily--text); }
+    body { background: #f0f0f0; font-family: var(--pf-global--FontFamily--text); margin: 0; }
 
     .page-header {
-      background: #fff;
-      border-bottom: 1px solid #d2d2d2;
-      padding: 1rem 2rem;
+      background: #1a1a1a;
+      padding: 0.9rem 2rem;
       display: flex;
       align-items: center;
       gap: 1rem;
     }
-    .page-header h1 {
-      font-family: var(--pf-global--FontFamily--heading);
-      font-size: 1.4rem;
-      font-weight: 700;
-      margin: 0;
-      color: #151515;
-    }
-    .page-header .subtitle { font-size: 0.8rem; color: #6a6e73; }
+    .page-header h1 { font-family: var(--pf-global--FontFamily--heading); font-size: 1.25rem; font-weight: 700; margin: 0; color: #fff; }
+    .page-header .subtitle { font-size: 0.75rem; color: #aaa; }
 
     .main { max-width: 1100px; margin: 2rem auto; padding: 0 1.5rem; }
 
     .tabs { display: flex; gap: 0; border-bottom: 2px solid #d2d2d2; margin-bottom: 1.5rem; }
     .tab-btn {
-      background: none; border: none; padding: 0.6rem 1.2rem;
+      background: none; border: none; padding: 0.6rem 1.3rem;
       font-size: 0.875rem; font-weight: 500; cursor: pointer;
       border-bottom: 3px solid transparent; margin-bottom: -2px; color: #6a6e73;
       transition: all 0.15s;
@@ -48,65 +41,79 @@
     .tab-panel.active { display: block; }
 
     /* Search bar */
-    .search-row { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; }
+    .search-row { display: flex; gap: 0.5rem; margin-bottom: 1.25rem; }
     .search-row input {
-      flex: 1; padding: 0.5rem 0.75rem; border: 1px solid #d2d2d2;
+      flex: 1; padding: 0.55rem 0.8rem; border: 1px solid #d2d2d2;
       border-radius: 4px; font-size: 0.9rem; outline: none;
     }
     .search-row input:focus { border-color: #0066cc; box-shadow: 0 0 0 2px #0066cc33; }
+
     .btn {
       padding: 0.5rem 1.1rem; border: none; border-radius: 4px;
       font-size: 0.875rem; font-weight: 500; cursor: pointer;
-      transition: background 0.15s;
+      transition: background 0.15s; white-space: nowrap;
     }
-    .btn-primary { background: #0066cc; color: #fff; }
+    .btn-primary   { background: #0066cc; color: #fff; }
     .btn-primary:hover { background: #004c99; }
     .btn-primary:disabled { background: #8bc1f7; cursor: not-allowed; }
-    .btn-danger { background: #c9190b; color: #fff; font-size: 0.8rem; padding: 0.3rem 0.7rem; }
+    .btn-secondary { background: #fff; color: #333; border: 1px solid #d2d2d2; }
+    .btn-secondary:hover { background: #f5f5f5; }
+    .btn-danger    { background: #c9190b; color: #fff; font-size: 0.8rem; padding: 0.3rem 0.7rem; }
     .btn-danger:hover { background: #a30000; }
-    .btn-success { background: #3e8635; color: #fff; font-size: 0.8rem; padding: 0.3rem 0.7rem; }
+    .btn-success   { background: #3e8635; color: #fff; font-size: 0.8rem; padding: 0.3rem 0.7rem; }
     .btn-success:hover { background: #2d6325; }
     .btn-success:disabled { background: #8ec98e; cursor: not-allowed; }
 
     /* Cards */
-    .card-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-      gap: 1rem;
-    }
+    .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem; }
     .card {
       background: #fff; border: 1px solid #d2d2d2; border-radius: 8px;
       padding: 1rem; display: flex; flex-direction: column; gap: 0.5rem;
     }
     .card-name { font-weight: 600; font-size: 0.9rem; color: #151515; }
-    .card-meta { font-size: 0.75rem; color: #6a6e73; font-family: monospace; }
-    .card-desc { font-size: 0.8rem; color: #333; flex: 1; }
-    .card-scores { display: flex; gap: 0.5rem; align-items: center; }
-    .score-badge {
-      font-size: 0.7rem; font-weight: 600; padding: 0.2rem 0.5rem;
-      border-radius: 4px; color: #fff;
-    }
-    .score-high { background: #3e8635; }
-    .score-mid  { background: #f0ab00; color: #151515; }
-    .score-low  { background: #c9190b; }
+    .card-meta { font-size: 0.73rem; color: #6a6e73; font-family: monospace; }
+    .card-desc { font-size: 0.8rem; color: #444; flex: 1; line-height: 1.4; }
     .card-actions { display: flex; justify-content: flex-end; }
 
+    /* Section header */
+    .section-title {
+      font-family: var(--pf-global--FontFamily--heading);
+      font-size: 1rem; font-weight: 700; color: #151515;
+      margin: 0 0 0.75rem; display: flex; align-items: center; gap: 0.5rem;
+    }
+    .count-badge {
+      background: #e7f1fa; color: #0066cc; font-size: 0.72rem;
+      font-weight: 600; padding: 0.1rem 0.5rem; border-radius: 10px;
+    }
+
+    /* Direct install box */
+    .direct-install-box {
+      background: #fff; border: 1px solid #d2d2d2; border-radius: 8px;
+      padding: 1rem 1.25rem; margin-bottom: 1.5rem;
+    }
+    .direct-install-box .label {
+      font-size: 0.8rem; font-weight: 600; color: #151515; margin-bottom: 0.4rem;
+    }
+    .direct-install-box .hint { font-size: 0.75rem; color: #6a6e73; margin-bottom: 0.6rem; }
+
+    /* Installed rows */
+    .installed-row {
+      display: flex; align-items: center; gap: 0.75rem;
+      background: #fff; border: 1px solid #d2d2d2; border-radius: 6px;
+      padding: 0.75rem 1rem; margin-bottom: 0.5rem;
+    }
+    .installed-row .iname { font-weight: 600; font-size: 0.9rem; flex: 1; }
+    .installed-row .idesc { font-size: 0.8rem; color: #6a6e73; }
+
     /* Toast */
-    #toast-container {
-      position: fixed; bottom: 1.5rem; right: 1.5rem;
-      display: flex; flex-direction: column; gap: 0.5rem; z-index: 9999;
-    }
-    .toast {
-      padding: 0.75rem 1.2rem; border-radius: 6px; font-size: 0.85rem;
-      color: #fff; box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-      animation: slide-in 0.2s ease;
-    }
+    #toast-container { position: fixed; bottom: 1.5rem; right: 1.5rem; display: flex; flex-direction: column; gap: 0.5rem; z-index: 9999; }
+    .toast { padding: 0.75rem 1.2rem; border-radius: 6px; font-size: 0.85rem; color: #fff; box-shadow: 0 4px 12px rgba(0,0,0,0.2); animation: slide-in 0.2s ease; }
     .toast-success { background: #3e8635; }
     .toast-error   { background: #c9190b; }
-    @keyframes slide-in { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+    @keyframes slide-in { from { transform: translateX(120%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
 
-    /* Empty / loading states */
-    .empty { text-align: center; padding: 3rem; color: #6a6e73; font-size: 0.9rem; }
+    /* Empty / loading */
+    .empty { text-align: center; padding: 2.5rem; color: #6a6e73; font-size: 0.9rem; }
     .spinner {
       display: inline-block; width: 18px; height: 18px;
       border: 2px solid #ccc; border-top-color: #0066cc;
@@ -115,13 +122,8 @@
     }
     @keyframes spin { to { transform: rotate(360deg); } }
 
-    .installed-row {
-      display: flex; align-items: center; gap: 0.75rem;
-      background: #fff; border: 1px solid #d2d2d2; border-radius: 6px;
-      padding: 0.75rem 1rem; margin-bottom: 0.5rem;
-    }
-    .installed-row .name { font-weight: 600; font-size: 0.9rem; flex: 1; }
-    .installed-row .desc { font-size: 0.8rem; color: #6a6e73; }
+    .tips { font-size: 0.75rem; color: #6a6e73; margin-top: 0.5rem; }
+    .tips code { background: #f0f0f0; padding: 0.1rem 0.3rem; border-radius: 3px; }
   </style>
 </head>
 <body>
@@ -139,22 +141,29 @@
 </header>
 
 <main class="main">
-
   <div class="tabs">
-    <button class="tab-btn active" onclick="switchTab('marketplace')">Marketplace</button>
-    <button class="tab-btn" onclick="switchTab('installed')">Installed</button>
+    <button class="tab-btn active" onclick="switchTab('marketplace', event)">Marketplace</button>
+    <button class="tab-btn" onclick="switchTab('installed', event)">
+      Installed <span id="installed-count-badge" class="count-badge" style="display:none"></span>
+    </button>
+    <button class="tab-btn" onclick="switchTab('github', event)">Install from GitHub</button>
   </div>
 
   <!-- ── Marketplace tab ──────────────────────────────────────────────── -->
   <div id="tab-marketplace" class="tab-panel active">
     <div class="search-row">
       <input id="mkt-query" type="text"
-             placeholder='Search 107,000+ skills — e.g. "frappe", "kubernetes", "react testing"'
+             placeholder='Search — e.g. "mcp", "code", "acceptance", "spreadsheet"'
              onkeydown="if(event.key==='Enter') searchMarketplace()" />
       <button class="btn btn-primary" id="mkt-btn" onclick="searchMarketplace()">Search</button>
+      <button class="btn btn-secondary" onclick="loadFeatured()">Browse all</button>
+    </div>
+    <div id="mkt-section-title" class="section-title" style="display:none">
+      <span id="mkt-section-label">Featured skills</span>
+      <span id="mkt-count-badge" class="count-badge"></span>
     </div>
     <div id="mkt-results">
-      <div class="empty">Search agentskill.sh to find skills for your agents.</div>
+      <div class="empty"><span class="spinner"></span> Loading available skills…</div>
     </div>
   </div>
 
@@ -165,17 +174,39 @@
     </div>
   </div>
 
+  <!-- ── GitHub install tab ────────────────────────────────────────────── -->
+  <div id="tab-github" class="tab-panel">
+    <div class="direct-install-box">
+      <div class="label">Install any skill from GitHub</div>
+      <div class="hint">Enter the GitHub repository in <code>owner/repo</code> format.
+        The repo must have a <code>SKILL.md</code> file at its root.</div>
+      <div class="search-row" style="margin-bottom:0">
+        <input id="gh-repo" type="text" placeholder="e.g.  anthropics/skills" style="font-family:monospace"
+               onkeydown="if(event.key==='Enter') installFromGitHub()" />
+        <input id="gh-slug" type="text" placeholder="Local name (optional)"
+               onkeydown="if(event.key==='Enter') installFromGitHub()" />
+        <button class="btn btn-primary" id="gh-btn" onclick="installFromGitHub()">Install</button>
+      </div>
+    </div>
+    <div class="tips">
+      Tips: search <a href="https://github.com/search?q=SKILL.md+in%3Apath&type=repositories" target="_blank">GitHub for SKILL.md repos</a>
+      or browse <a href="https://agentskillhub.dev" target="_blank">agentskillhub.dev</a>.
+    </div>
+  </div>
 </main>
 
 <div id="toast-container"></div>
 
 <script>
+// ── State ─────────────────────────────────────────────────────────────────
+const installing = new Set();
+
 // ── Tab switching ─────────────────────────────────────────────────────────
-function switchTab(tab) {
+function switchTab(tab, evt) {
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('tab-' + tab).classList.add('active');
-  event.target.classList.add('active');
+  if (evt) evt.target.classList.add('active');
   if (tab === 'installed') loadInstalled();
 }
 
@@ -188,60 +219,85 @@ function toast(msg, type = 'success') {
   setTimeout(() => el.remove(), 4000);
 }
 
-// ── Score badge ───────────────────────────────────────────────────────────
-function scoreBadge(label, score) {
-  if (score == null) return '';
-  const cls = score >= 70 ? 'score-high' : score >= 40 ? 'score-mid' : 'score-low';
-  return `<span class="score-badge ${cls}">${label} ${score}</span>`;
-}
-
 // ── Marketplace search ────────────────────────────────────────────────────
-const installing = new Set();
+async function loadFeatured() {
+  document.getElementById('mkt-query').value = '';
+  await doSearch('');
+}
 
 async function searchMarketplace() {
   const q = document.getElementById('mkt-query').value.trim();
-  if (q.length < 2) { toast('Enter at least 2 characters', 'error'); return; }
+  await doSearch(q);
+}
 
+async function doSearch(q) {
   const btn = document.getElementById('mkt-btn');
   btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span> Searching…';
-  document.getElementById('mkt-results').innerHTML = '<div class="empty"><span class="spinner"></span> Searching agentskill.sh…</div>';
+  btn.innerHTML = '<span class="spinner"></span>';
+  document.getElementById('mkt-results').innerHTML =
+    '<div class="empty"><span class="spinner"></span> Searching agentskill.sh…</div>';
+  document.getElementById('mkt-section-title').style.display = 'none';
 
   try {
-    const res = await fetch(`/api/marketplace/search?q=${encodeURIComponent(q)}&limit=10`);
+    const url = q.length >= 2
+      ? `/api/marketplace/search?q=${encodeURIComponent(q)}&limit=10`
+      : `/api/marketplace/search?limit=10`;
+    const res = await fetch(url);
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || 'Search failed');
-    renderResults(data.results || []);
+    const label = data.featured ? 'All available skills' : `Results for "${q}"`;
+    renderResults(data.results || [], label);
   } catch (e) {
     document.getElementById('mkt-results').innerHTML =
-      `<div class="empty">Error: ${e.message}</div>`;
+      `<div class="empty">Error: ${escHtml(e.message)}</div>`;
   } finally {
     btn.disabled = false;
     btn.textContent = 'Search';
   }
 }
 
-function renderResults(results) {
+function renderResults(results, label) {
+  const titleEl = document.getElementById('mkt-section-title');
+  const labelEl = document.getElementById('mkt-section-label');
+  const badgeEl = document.getElementById('mkt-count-badge');
+
+  if (results.length) {
+    titleEl.style.display = 'flex';
+    labelEl.textContent = label;
+    badgeEl.textContent = results.length;
+  } else {
+    titleEl.style.display = 'none';
+  }
+
   const el = document.getElementById('mkt-results');
   if (!results.length) {
-    el.innerHTML = '<div class="empty">No skills found. Try different keywords.</div>';
+    el.innerHTML = `
+      <div class="empty">
+        No skills found for this query.<br>
+        <span style="font-size:0.8rem;margin-top:0.5rem;display:block">
+          The marketplace is early — try: <code>mcp</code>, <code>code</code>,
+          <code>acceptance</code>, <code>spreadsheet</code>, or
+          <button class="btn btn-secondary" style="padding:0.2rem 0.5rem;font-size:0.8rem;margin-left:4px"
+            onclick="loadFeatured()">Browse all</button>
+        </span>
+      </div>`;
     return;
   }
+
   el.innerHTML = `<div class="card-grid">${results.map(r => {
-    const owner = r.owner || '';
-    const repo  = r.repo  || '';
-    const slug  = r.slug  || `${owner}-${repo}`.replace(/[^a-z0-9-]/gi, '-').toLowerCase();
-    const installs = r.totalInstalls != null ? `<span class="score-badge score-high">${r.totalInstalls} installs</span>` : '';
-    const id = `install-${slug}`;
+    const slug = r.slug || `${r.owner}-${r.repo}`.toLowerCase();
+    const id = `install-${CSS.escape(slug)}`;
     return `
       <div class="card">
         <div class="card-name">${escHtml(r.name || slug)}</div>
-        <div class="card-meta">${escHtml(r.sourceIdentifier || `${owner}/${repo}`)}</div>
-        <div class="card-desc">${escHtml(r.description || 'No description.')}</div>
-        <div class="card-scores">${installs}</div>
+        <div class="card-meta">${escHtml(r.sourceIdentifier || `${r.owner}/${r.repo}`)}</div>
+        <div class="card-desc">${escHtml(truncate(r.description || 'No description.', 160))}</div>
         <div class="card-actions">
           <button id="${id}" class="btn btn-success"
-            onclick="installSkill('${escAttr(owner)}','${escAttr(repo)}','${escAttr(slug)}','${id}')">
+            data-owner="${escAttr(r.owner)}"
+            data-repo="${escAttr(r.repo)}"
+            data-slug="${escAttr(slug)}"
+            onclick="installFromCard(this)">
             Install
           </button>
         </div>
@@ -249,10 +305,10 @@ function renderResults(results) {
   }).join('')}</div>`;
 }
 
-async function installSkill(owner, repo, slug, btnId) {
+async function installFromCard(btn) {
+  const { owner, repo, slug } = btn.dataset;
   if (installing.has(slug)) return;
   installing.add(slug);
-  const btn = document.getElementById(btnId);
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span>';
 
@@ -264,14 +320,50 @@ async function installSkill(owner, repo, slug, btnId) {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || 'Install failed');
-    btn.textContent = 'Installed ✓';
+    btn.textContent = '✓ Installed';
+    btn.style.background = '#3e8635';
+    updateInstalledBadge();
     toast(`Installed: ${slug}`);
   } catch (e) {
     btn.disabled = false;
     btn.textContent = 'Install';
-    toast(`Failed: ${e.message}`, 'error');
+    toast(e.message, 'error');
   } finally {
     installing.delete(slug);
+  }
+}
+
+// ── Direct GitHub install ──────────────────────────────────────────────────
+async function installFromGitHub() {
+  const repoInput = document.getElementById('gh-repo').value.trim();
+  const slugInput = document.getElementById('gh-slug').value.trim();
+  if (!repoInput.includes('/')) {
+    toast('Enter in owner/repo format', 'error'); return;
+  }
+  const [owner, repo] = repoInput.split('/', 2);
+  const slug = slugInput || `${owner}-${repo}`.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+
+  const btn = document.getElementById('gh-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Installing…';
+
+  try {
+    const res = await fetch('/api/marketplace/install', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ owner, repo, slug }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Install failed');
+    document.getElementById('gh-repo').value = '';
+    document.getElementById('gh-slug').value = '';
+    updateInstalledBadge();
+    toast(`Installed: ${slug}`);
+  } catch (e) {
+    toast(e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Install';
   }
 }
 
@@ -283,50 +375,84 @@ async function loadInstalled() {
     const res = await fetch('/api/installed');
     const data = await res.json();
     renderInstalled(data.skills || []);
+    updateInstalledBadgeFromList(data.skills || []);
   } catch (e) {
     document.getElementById('installed-list').innerHTML =
-      `<div class="empty">Error: ${e.message}</div>`;
+      `<div class="empty">Error: ${escHtml(e.message)}</div>`;
   }
 }
 
 function renderInstalled(skills) {
   const el = document.getElementById('installed-list');
   if (!skills.length) {
-    el.innerHTML = '<div class="empty">No marketplace skills installed yet. Browse the Marketplace tab to install one.</div>';
+    el.innerHTML = `<div class="empty">
+      No marketplace skills installed yet.<br>
+      <span style="font-size:0.8rem;color:#6a6e73">
+        Browse the Marketplace tab or use the GitHub tab to install one.
+      </span>
+    </div>`;
     return;
   }
   el.innerHTML = skills.map(s => `
-    <div class="installed-row" id="row-${escAttr(s.slug)}">
+    <div class="installed-row" id="row-${CSS.escape(s.slug)}">
       <div style="flex:1">
-        <div class="name">${escHtml(s.name)}</div>
-        <div class="desc">${escHtml(s.description || s.slug)}</div>
+        <div class="iname">${escHtml(s.name)}</div>
+        <div class="idesc">${escHtml(s.description || s.slug)}</div>
       </div>
-      <button class="btn btn-danger"
-        onclick="deleteSkill('${escAttr(s.slug)}')">Remove</button>
+      <button class="btn btn-danger" data-slug="${escAttr(s.slug)}"
+        onclick="deleteSkill(this)">Remove</button>
     </div>
   `).join('');
 }
 
-async function deleteSkill(slug) {
+async function deleteSkill(btn) {
+  const slug = btn.dataset.slug;
   if (!confirm(`Remove skill "${slug}"?`)) return;
+  btn.disabled = true;
+  btn.textContent = '…';
   try {
     const res = await fetch(`/api/installed/${encodeURIComponent(slug)}`, { method: 'DELETE' });
     if (!res.ok && res.status !== 204) throw new Error('Delete failed');
     document.getElementById(`row-${slug}`)?.remove();
+    updateInstalledBadge();
     toast(`Removed: ${slug}`);
-    loadInstalled();
   } catch (e) {
-    toast(`Failed: ${e.message}`, 'error');
+    btn.disabled = false;
+    btn.textContent = 'Remove';
+    toast(e.message, 'error');
+  }
+}
+
+async function updateInstalledBadge() {
+  try {
+    const res = await fetch('/api/installed');
+    const data = await res.json();
+    updateInstalledBadgeFromList(data.skills || []);
+  } catch { /* ignore */ }
+}
+
+function updateInstalledBadgeFromList(skills) {
+  const badge = document.getElementById('installed-count-badge');
+  if (skills.length > 0) {
+    badge.style.display = 'inline';
+    badge.textContent = skills.length;
+  } else {
+    badge.style.display = 'none';
   }
 }
 
 // ── Utils ─────────────────────────────────────────────────────────────────
 function escHtml(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
-function escAttr(s) {
-  return String(s).replace(/'/g,"\\'");
-}
+function escAttr(s) { return String(s).replace(/"/g, '&quot;'); }
+function truncate(s, n) { return s.length > n ? s.slice(0, n) + '…' : s; }
+
+// ── Init ──────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  loadFeatured();
+  updateInstalledBadge();
+});
 </script>
 </body>
 </html>
