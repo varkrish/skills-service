@@ -74,6 +74,17 @@ podman compose -f dev-compose.yml up -d skills-service skill-manager
 
 For backend-only dev compose under `opl-ai-software-team/`, see that repo’s `compose.dev.yaml` (may differ from the mono `dev-compose.yml`).
 
+### Skills-only stack (no backend / validator / frontend)
+
+From [opl_ai_mono](https://github.com/varkrish/opl-crew-mono) root, use `dev-compose.skills.yml` to run **only** `skills-service` and `skill-manager` with the same shared marketplace volume:
+
+```bash
+cd opl_ai_mono
+podman compose -f dev-compose.skills.yml up -d
+```
+
+MCP for agents remains at **`http://localhost:8090/mcp`** (see `src/main.py` — `api.mount("/mcp", ...)`).
+
 ## API
 
 | Method | Path | Description |
