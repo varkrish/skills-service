@@ -69,7 +69,7 @@ Then:
 
 ```bash
 cd opl_ai_mono
-podman compose -f dev-compose.yml up -d skills-service skill-manager
+podman compose -f dev-compose.yml --profile skills up -d
 ```
 
 For backend-only dev compose under `opl-ai-software-team/`, see that repo’s `compose.dev.yaml` (may differ from the mono `dev-compose.yml`).
