@@ -75,11 +75,11 @@ class SkillIndex:
         if not self._ready or self._index is None:
             return []
 
-        engine = self._index.as_query_engine(similarity_top_k=top_k * 3 if tags else top_k)
-        response = engine.query(query_text)
+        retriever = self._index.as_retriever(similarity_top_k=top_k * 3 if tags else top_k)
+        nodes = retriever.retrieve(query_text)
 
         results: List[Dict[str, Any]] = []
-        for node in response.source_nodes:
+        for node in nodes:
             meta = node.metadata
             node_tags = meta.get("tags", [])
             if tags and node_tags and not any(t in node_tags for t in tags):
