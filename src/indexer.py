@@ -4,6 +4,7 @@ Skill indexer — builds and caches a VectorStoreIndex from discovered skills.
 import hashlib
 import json
 import logging
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -16,15 +17,31 @@ from discovery import discover_skills, compute_content_hash
 
 logger = logging.getLogger(__name__)
 
+# Below this cosine-similarity score, a "match" is considered noise rather than
+# a genuine hit — e.g. querying for "Apache Camel" against an index that only
+# has React/Frappe/Python skills should return NOTHING, not the closest-available
+# irrelevant skill. Irrelevant skills injected as "ground truth" mislead agents
+# into using the wrong framework's conventions.
+#
+# Calibrated empirically against BAAI/bge-small-en-v1.5 with this repo's skill
+# set: unrelated queries (e.g. "Apache Camel route builder", "Java Spring Boot
+# MVC") score ~0.47-0.63 against every indexed skill (there's an embedding
+# "software text" baseline floor — it's never near 0), while genuine matches
+# (e.g. a Frappe query against the frappe-api-patterns skill, or a pytest query
+# against python-tdd) score ~0.70-0.82. 0.68 sits in the gap. Tune via
+# SKILLS_MIN_SCORE if the skill set or embedding model changes.
+DEFAULT_MIN_SCORE = float(os.environ.get("SKILLS_MIN_SCORE", "0.68"))
+
 
 class SkillIndex:
     """Manages the vector index for skill documents."""
 
-    def __init__(self, base_dirs, cache_dir: Path):
+    def __init__(self, base_dirs, cache_dir: Path, min_score: float = DEFAULT_MIN_SCORE):
         if isinstance(base_dirs, Path):
             base_dirs = [base_dirs]
         self.base_dirs: List[Path] = list(base_dirs)
         self.cache_dir = cache_dir
+        self.min_score = min_score
         self._index: Optional[VectorStoreIndex] = None
         self._skills: List[Dict[str, Any]] = []
         self._ready = False
@@ -70,16 +87,38 @@ class SkillIndex:
         self._ready = True
         logger.info("Index ready: %d skills indexed", len(self._skills))
 
-    def query(self, query_text: str, top_k: int = 3, tags: Optional[List[str]] = None) -> List[Dict[str, Any]]:
-        """Query the index and return matching skill content."""
+    def query(
+        self,
+        query_text: str,
+        top_k: int = 3,
+        tags: Optional[List[str]] = None,
+        min_score: Optional[float] = None,
+    ) -> List[Dict[str, Any]]:
+        """Query the index and return matching skill content.
+
+        Results below ``min_score`` (cosine similarity) are dropped rather than
+        padded with the closest-available-but-irrelevant skill. When the index
+        has no skill for the queried framework, this correctly returns an empty
+        list instead of confidently-wrong content.
+        """
         if not self._ready or self._index is None:
             return []
 
-        retriever = self._index.as_retriever(similarity_top_k=top_k * 3 if tags else top_k)
+        threshold = self.min_score if min_score is None else min_score
+
+        # Over-fetch when filtering by tags/score so post-filtering still has
+        # enough candidates to reach top_k where genuinely relevant. Uses a
+        # retriever (not as_query_engine) to avoid the LlamaIndex context-size
+        # crash from synthesizing a response over all retrieved nodes.
+        fetch_k = top_k * 3 if (tags or threshold > 0) else top_k
+        retriever = self._index.as_retriever(similarity_top_k=fetch_k)
         nodes = retriever.retrieve(query_text)
 
         results: List[Dict[str, Any]] = []
         for node in nodes:
+            score = getattr(node, "score", None)
+            if score is not None and score < threshold:
+                continue
             meta = node.metadata
             node_tags = meta.get("tags", [])
             if tags and node_tags and not any(t in node_tags for t in tags):
@@ -88,6 +127,7 @@ class SkillIndex:
                 "skill_name": meta.get("skill_name", "unknown"),
                 "content": node.text,
                 "tags": node_tags,
+                "score": score,
             })
             if len(results) >= top_k:
                 break

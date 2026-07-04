@@ -51,12 +51,14 @@ class QueryRequest(BaseModel):
     query: str
     top_k: int = 3
     tags: Optional[List[str]] = None
+    min_score: Optional[float] = None
 
 
 class SkillResult(BaseModel):
     skill_name: str
     content: str
     tags: List[str]
+    score: Optional[float] = None
 
 
 class QueryResponse(BaseModel):
@@ -166,7 +168,7 @@ def create_app() -> Starlette:
 
         loop = asyncio.get_event_loop()
         results = await loop.run_in_executor(
-            None, lambda: idx.query(req.query, req.top_k, req.tags)
+            None, lambda: idx.query(req.query, req.top_k, req.tags, req.min_score)
         )
         return QueryResponse(results=[SkillResult(**r) for r in results])
 
